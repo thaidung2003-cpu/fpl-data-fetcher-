@@ -185,7 +185,7 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
     </body>
     </html>
     """
-    st.components.v1.html(d3_code, width=width, height=height, scrolling=False)
+    st.components.v1.html(d3_code, width=width, height=height, scrolling=True)
 
 
 # --- Data Fetching and Processing ---
@@ -314,7 +314,9 @@ display_df = filtered_df[selected_columns]
 st.sidebar.header("Graph Options")
 show_graph = st.sidebar.toggle("Show Data Graph", value=True, key="show_data_graph_toggle")
 show_labels = st.sidebar.toggle("Show Player Labels on Graph", value=True, key="show_labels_toggle")
-
+# NEW: Slider to dynamically stretch the chart
+graph_width = st.sidebar.slider("Chart Width (px)", min_value=800, max_value=4000, value=1300, step=100)
+graph_height = st.sidebar.slider("Chart Height (px)", min_value=500, max_value=3000, value=750, step=50)
 if show_graph:
     all_numeric_cols = sorted(filtered_df.select_dtypes(include=['float64', 'int64']).columns.tolist())
     
@@ -367,6 +369,6 @@ if show_graph:
             f"Players in graph range: {len(graph_data)}"
         ]
         
-        FPLGraph(graph_data.to_dict('records'), x_axis, y_axis, chart_title, footnotes_list, show_labels=show_labels, width=1300, height=750)
+        FPLGraph(graph_data.to_dict('records'), x_axis, y_axis, chart_title, footnotes_list, show_labels=show_labels, width=graph_width, height=graph_heigh)
     else:
         st.info("No players match the combined table and graph axis filters. Try widening your slider ranges.")
