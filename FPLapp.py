@@ -23,7 +23,7 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, width=1300, 
     .title {{ font-size: 20px; font-weight: 500; fill: #fff; text-anchor: middle; }}
     .footnote {{ font-size: 12px; fill: #999; font-style: italic; }}
     .dot-group text {{ pointer-events: none; }}
-    .dot-circle {{ stroke: #ffffff; stroke-width: 1.5px; }}
+    .dot-circle {{ stroke: #ffffff; stroke-width: 1px; }}
     </style>
     <body>
     <div id="chart-container"></div>
@@ -40,22 +40,48 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, width=1300, 
     const innerWidth = width - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
 
-    // --- Premier League Official Team Colors Mapping ---
-    const teamColors = {{
-        'ARS': '#EF0107', 'AVL': '#95BFE5', 'BOU': '#DA291C', 'BRE': '#E30613', 
-        'BHA': '#0057B8', 'CHE': '#034694', 'CRY': '#1B458F', 'EVE': '#003399', 
-        'FUL': '#FFFFFF', 'IPS': '#0054A6', 'LEI': '#0053A0', 'LIV': '#C8102E', 
-        'MCI': '#6CABDD', 'MUN': '#DA020E', 'NEW': '#F2F2F2', 'NFO': '#DD0000', 
-        'SOU': '#D12421', 'TOT': '#FFFFFF', 'WHU': '#7A263A', 'WOL': '#FDB913'
-    }};
-
-    function getTeamColor(team) {{
-        return teamColors[team] || '#2196F3';
-    }}
-
     const svg = d3.select("#chart-container").append("svg")
         .attr("width", width)
         .attr("height", height);
+
+    // --- Premier League Official Team Colors Mapping (Primary & Secondary) ---
+    const teamColors = {{
+        'ARS': {{p: '#EF0107', s: '#FFFFFF'}},
+        'AVL': {{p: '#670E36', s: '#95BFE5'}},
+        'BOU': {{p: '#DA291C', s: '#000000'}},
+        'BRE': {{p: '#E30613', s: '#FFFFFF'}},
+        'BHA': {{p: '#0057B8', s: '#FFFFFF'}},
+        'CHE': {{p: '#034694', s: '#FFFFFF'}},
+        'CRY': {{p: '#1B458F', s: '#C4122E'}},
+        'EVE': {{p: '#003399', s: '#FFFFFF'}},
+        'FUL': {{p: '#FFFFFF', s: '#000000'}},
+        'IPS': {{p: '#0054A6', s: '#FFFFFF'}},
+        'LEI': {{p: '#0053A0', s: '#FFFFFF'}},
+        'LIV': {{p: '#C8102E', s: '#FFFFFF'}},
+        'MCI': {{p: '#6CABDD', s: '#FFFFFF'}},
+        'MUN': {{p: '#DA020E', s: '#000000'}},
+        'NEW': {{p: '#000000', s: '#FFFFFF'}},
+        'NFO': {{p: '#DD0000', s: '#FFFFFF'}},
+        'SOU': {{p: '#D12421', s: '#FFFFFF'}},
+        'TOT': {{p: '#FFFFFF', s: '#132257'}},
+        'WHU': {{p: '#7A263A', s: '#1BB1E7'}},
+        'WOL': {{p: '#FDB913', s: '#000000'}}
+    }};
+
+    const defs = svg.append("defs");
+    
+    // Generate a diagonal split gradient for every team
+    for (const [team, colors] of Object.entries(teamColors)) {{
+        const grad = defs.append("linearGradient")
+            .attr("id", `grad-${{team}}`)
+            .attr("x1", "0%")
+            .attr("x2", "100%")
+            .attr("y1", "0%")
+            .attr("y2", "100%");
+            
+        grad.append("stop").attr("offset", "50%").attr("stop-color", colors.p);
+        grad.append("stop").attr("offset", "50%").attr("stop-color", colors.s);
+    }}
 
     const chart = svg.append("g")
         .attr("transform", `translate(${{margin.left}}, ${{margin.top}})`);
@@ -73,7 +99,6 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, width=1300, 
         .domain([yMin * 0.9, yMax * 1.1])
         .range([innerHeight, 0]);
 
-    // 1. Grid Lines (Tick formats remain empty so the lines don't print rogue numbers)
     chart.append("g")
         .attr("class", "grid")
         .attr("transform", `translate(0, ${{innerHeight}})`)
@@ -83,7 +108,6 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, width=1300, 
         .attr("class", "grid")
         .call(d3.axisLeft(yScale).tickSize(-innerWidth).tickFormat(""));
 
-    // 2. Axes (Manual string formatting removed, allowing D3 to auto-scale decimals)
     chart.append("g")
         .attr("transform", `translate(0, ${{innerHeight}})`)
         .call(d3.axisBottom(xScale).ticks(10));
@@ -118,10 +142,11 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, width=1300, 
         .attr("class", "dot-group")
         .attr("transform", d => `translate(${{xScale(d[xName])}}, ${{yScale(d[yName])}})`);
 
+    // Apply the 2-color gradient to the circles
     dots.append("circle")
         .attr("class", "dot-circle")
         .attr("r", 10)
-        .attr("fill", d => getTeamColor(d.Team))
+        .attr("fill", d => teamColors[d.Team] ? `url(#grad-${{d.Team}})` : '#2196F3')
         .attr("opacity", 0.95);
 
     dots.append("text")
@@ -279,14 +304,13 @@ if show_graph:
         y_min_val, y_max_val = float(graph_base_df[y_axis].min()), float(graph_base_df[y_axis].max())
         if y_min_val == y_max_val:
             y_max_val += 1.0
-        # Use a fine step for small ranges (like xG) and a whole number step for large ranges (like Minutes)
         y_step = 0.01 if (y_max_val - y_min_val) < 50 else 1.0
         y_range = st.slider(f"{y_axis} Range", y_min_val, y_max_val, (y_min_val, y_max_val), step=y_step)
         
     graph_data = graph_base_df[(graph_base_df[x_axis] >= x_range[0]) & (graph_base_df[x_axis] <= x_range[1]) & (graph_base_df[y_axis] >= y_range[0]) & (graph_base_df[y_axis] <= y_range[1])]
 
 # --- Data Table Rendering ---
-st.write(f"Showing **{len(display_df)}** players after primary filters.")
+st.write(f"Showing {len(display_df)} players after primary filters.")
 st.dataframe(display_df, use_container_width=True, hide_index=True)
 
 # --- Graph Rendering ---
