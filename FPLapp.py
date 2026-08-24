@@ -273,10 +273,28 @@ filtered_df = filtered_df[filtered_df['Minutes Played'] >= min_minutes]
 
 # --- Sidebar Display Options ---
 st.sidebar.header("Display Options")
-all_columns = filtered_df.columns.tolist()
+
+# Force a logical order: Core stats first, then everything else sorted alphabetically
+core_cols = ['First Name', 'Last Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'Minutes Played']
+other_cols = sorted([c for c in filtered_df.columns if c not in core_cols])
+logical_columns = core_cols + other_cols
+
 default_cols = ['First Name', 'Last Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'xGI90', 'Defcons90', 'Minutes Played']
-selected_columns = st.sidebar.multiselect("Select Table Columns", all_columns, default=[c for c in default_cols if c in all_columns])
+selected_columns = st.sidebar.multiselect("Select Table Columns", logical_columns, default=[c for c in default_cols if c in logical_columns])
 display_df = filtered_df[selected_columns]
+
+# --- Graph Options & Axis Selection ---
+st.sidebar.header("Graph Options")
+show_graph = st.sidebar.toggle("Show Data Graph", value=True)
+
+graph_data = pd.DataFrame()
+if show_graph:
+    # Sort the graph axis dropdowns alphabetically as well
+    all_numeric_cols = sorted(filtered_df.select_dtypes(include=['float64', 'int64']).columns.tolist())
+    
+    st.sidebar.subheader("Select Graph Axes")
+    x_axis = st.sidebar.selectbox("X-Axis", all_numeric_cols, index=all_numeric_cols.index('xGI90') if 'xGI90' in all_numeric_cols else 0)
+    y_axis = st.sidebar.selectbox("Y-Axis", all_numeric_cols, index=all_numeric_cols.index('Defcons90') if 'Defcons90' in all_numeric_cols else 1)
 
 # --- Graph Options & Axis Selection ---
 st.sidebar.header("Graph Options")
