@@ -5,7 +5,6 @@ import requests
 import json
 import re
 import difflib
-
 st.set_page_config(layout="wide", page_title="FPL Advanced Analytics")
 
 # --- Custom D3 Visualization Component ---
