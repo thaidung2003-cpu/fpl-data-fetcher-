@@ -263,6 +263,43 @@ min_minutes = st.sidebar.number_input(
     value=0, 
     step=10 if max_mins_played < 200 else 100
 )
+
+min_cost, max_cost = st.sidebar.slider(
+    "Cost (M)", 
+    float(df['Cost (M)'].min()), float(df['Cost (M)'].max()), 
+    (float(df['Cost (M)'].min()), float(df['Cost (M)'].max())), 
+    step=0.1
+)
+
+# This line is critical! It builds the baseline dataframe before applying filters.
+filtered_df = df.copy()
+
+if search_name:
+    search_terms = [term.strip() for term in search_name.split(',') if term.strip()]
+    search_pattern = '|'.join(search_terms)
+    
+    # Check First Name, Last Name, AND Web Name so you never miss a match
+    filtered_df = filtered_df[
+        filtered_df['First Name'].str.contains(search_pattern, case=False, na=False) |
+        filtered_df['Last Name'].str.contains(search_pattern, case=False, na=False) |
+        filtered_df['Web Name'].str.contains(search_pattern, case=False, na=False)
+    ]
+
+if selected_teams:
+    filtered_df = filtered_df[filtered_df['Team'].isin(selected_teams)]
+if selected_positions:
+    filtered_df = filtered_df[filtered_df['Position'].isin(selected_positions)]
+
+filtered_df = filtered_df[(filtered_df['Cost (M)'] >= min_cost) & (filtered_df['Cost (M)'] <= max_cost)]
+filtered_df = filtered_df[filtered_df['Minutes Played'] >= min_minutes]
+
+# --- Sidebar Display Options ---
+st.sidebar.header("Display Options")
+
+core_cols = ['First Name', 'Last Name', 'Web Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'Minutes Played']
+other_cols = sorted([c for c in filtered_df.columns if c not in core_cols])
+logical_columns = core_cols + other_cols
+)
 # --- Sidebar Display Options ---
 st.sidebar.header("Display Options")
 
