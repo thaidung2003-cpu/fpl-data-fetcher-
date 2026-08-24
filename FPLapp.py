@@ -248,46 +248,21 @@ st.title("FPL Advanced Player Explorer")
 st.sidebar.header("Filter Players")
 search_name = st.sidebar.text_input("Look up by Name (separate by commas)")
 selected_teams = st.sidebar.multiselect("Categorize by Team", sorted(df['Team'].unique()))
-selected_positions = st.sidebar.multiselect("Categorize by Position", df['Position'].unique(), default=["DEF"])
+
+# Default to showing ALL positions instead of just Defenders
+all_positions = df['Position'].unique().tolist() if not df.empty else []
+selected_positions = st.sidebar.multiselect("Categorize by Position", all_positions, default=all_positions)
 
 max_mins_played = int(df['Minutes Played'].max()) if not df.empty and df['Minutes Played'].max() > 0 else 90
-default_mins = min(1500, max_mins_played)
 
+# Default to 0 minutes so nobody is hidden automatically early in the season
 min_minutes = st.sidebar.number_input(
     "Minimum Minutes Played", 
     min_value=0, 
     max_value=max_mins_played, 
-    value=default_mins, 
+    value=0, 
     step=10 if max_mins_played < 200 else 100
 )
-
-min_cost, max_cost = st.sidebar.slider(
-    "Cost (M)", 
-    float(df['Cost (M)'].min()), float(df['Cost (M)'].max()), 
-    (float(df['Cost (M)'].min()), float(df['Cost (M)'].max())), 
-    step=0.1
-)
-
-filtered_df = df.copy()
-
-if search_name:
-    # Multi-search: Split by commas, clear whitespace, build Regex pattern
-    search_terms = [term.strip() for term in search_name.split(',') if term.strip()]
-    search_pattern = '|'.join(search_terms)
-    
-    filtered_df = filtered_df[
-        filtered_df['Last Name'].str.contains(search_pattern, case=False, na=False) |
-        filtered_df['Web Name'].str.contains(search_pattern, case=False, na=False)
-    ]
-
-if selected_teams:
-    filtered_df = filtered_df[filtered_df['Team'].isin(selected_teams)]
-if selected_positions:
-    filtered_df = filtered_df[filtered_df['Position'].isin(selected_positions)]
-
-filtered_df = filtered_df[(filtered_df['Cost (M)'] >= min_cost) & (filtered_df['Cost (M)'] <= max_cost)]
-filtered_df = filtered_df[filtered_df['Minutes Played'] >= min_minutes]
-
 # --- Sidebar Display Options ---
 st.sidebar.header("Display Options")
 
