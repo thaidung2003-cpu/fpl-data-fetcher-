@@ -136,15 +136,21 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
                           Cost: <b>£${{d['Cost (M)']}}m</b><br><br>
                           ${{xName}}: <b>${{d[xName]}}</b><br>
                           ${{yName}}: <b>${{d[yName]}}</b>`);
+            }})
+            .on("mousemove", function(event) {{
+            // Get the tooltip's width dynamically
+            const tooltipWidth = tooltip.node().offsetWidth;
+            let xPos = event.pageX + 20;
+            let yPos = event.pageY - 20;
+            
+            // If the tooltip pushes past the right edge of the screen, flip it to the left!
+            if (xPos + tooltipWidth > window.innerWidth) {{
+                xPos = event.pageX - tooltipWidth - 20;
+            }}
+            
+            tooltip.style("left", xPos + "px")
+                   .style("top", yPos + "px");
         }})
-        .on("mousemove", function(event) {{
-            tooltip.style("left", (event.pageX + 20) + "px")
-                   .style("top", (event.pageY - 20) + "px");
-        }})
-        .on("mouseout", function(event, d) {{
-            d3.select(this).attr("stroke", "#ffffff").attr("stroke-width", 1).attr("opacity", 0.9);
-            tooltip.style("opacity", 0);
-        }});
 
     // Only draw the static labels if the toggle is turned ON
     if (showLabels) {{
