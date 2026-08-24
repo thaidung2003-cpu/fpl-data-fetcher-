@@ -299,7 +299,6 @@ st.sidebar.header("Display Options")
 core_cols = ['First Name', 'Last Name', 'Web Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'Minutes Played']
 other_cols = sorted([c for c in filtered_df.columns if c not in core_cols])
 logical_columns = core_cols + other_cols
-)
 # --- Sidebar Display Options ---
 st.sidebar.header("Display Options")
 
