@@ -66,7 +66,7 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, width=1300, 
         'NFO': {p: '#DD0000', s: '#FFFFFF'}, // Nottingham Forest
         'SUN': {p: '#FF0000', s: '#FFFFFF'}, // Sunderland (Red & White)
         'TOT': {p: '#FFFFFF', s: '#132257'}  // Tottenham
-    }};
+    };
 
     const defs = svg.append("defs");
     
