@@ -307,8 +307,7 @@ if show_graph:
     st.sidebar.subheader("Select Graph Axes")
     x_axis = st.sidebar.selectbox("X-Axis", all_numeric_cols, index=all_numeric_cols.index('xGI90') if 'xGI90' in all_numeric_cols else 0)
     y_axis = st.sidebar.selectbox("Y-Axis", all_numeric_cols, index=all_numeric_cols.index('Defcons90') if 'Defcons90' in all_numeric_cols else 1)
-
-   graph_cols_needed = list(set(['First Name', 'Last Name', 'Web Name', 'Position', 'Team'] + [x_axis, y_axis]))
+    graph_cols_needed = list(set(['First Name', 'Last Name', 'Web Name', 'Position', 'Team'] + [x_axis, y_axis]))
     graph_base_df = filtered_df[[c for c in graph_cols_needed if c in filtered_df.columns]]
 
     col1, col2 = st.columns(2)
