@@ -16,7 +16,7 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
     <!DOCTYPE html>
     <meta charset="utf-8">
     <style>
-    body {{ font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #121212; color: #f2f2f2; margin: 0; padding: 0; overflow: hidden; }}
+    body {{ font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #121212; color: #f2f2f2; margin: 0; padding: 0; overflow: auto; }}
     .axis-label {{ font-size: 16px; font-weight: 500; fill: #f2f2f2; }}
     .tick text {{ font-size: 14px; fill: #f2f2f2; }}
     .grid line {{ stroke: #555; stroke-opacity: 0.5; stroke-dasharray: 2, 2; }}
@@ -369,6 +369,6 @@ if show_graph:
             f"Players in graph range: {len(graph_data)}"
         ]
         
-        FPLGraph(graph_data.to_dict('records'), x_axis, y_axis, chart_title, footnotes_list, show_labels=show_labels, width=graph_width, height=graph_height)
+        FPLGraph(graph_data.to_dict('records'), x_axis, y_axis, chart_title, footnotes_list, show_labels=show_labels, height=graph_height)
     else:
         st.info("No players match the combined table and graph axis filters. Try widening your slider ranges.")
