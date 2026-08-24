@@ -84,7 +84,7 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
         'COV': {{p: '#00BFFF', s: '#FFFFFF'}}, 'CRY': {{p: '#1B458F', s: '#C4122E'}},
         'EVE': {{p: '#003399', s: '#FFFFFF'}}, 'FUL': {{p: '#FFFFFF', s: '#000000'}},
         'HUL': {{p: '#F5A12D', s: '#000000'}}, 'IPS': {{p: '#0054A6', s: '#FFFFFF'}},
-        'LEE': {{p: '#FFFFFF', s: '#FFFF00'}}, 'LIV': {{p: '#C8102E', s: '#FFFFFF'}},
+        'LEE': {{p: '#1D428A', s: '#FFFF00'}}, 'LIV': {{p: '#C8102E', s: '#FFFFFF'}},
         'MCI': {{p: '#6CABDD', s: '#FFFFFF'}}, 'MUN': {{p: '#DA020E', s: '#000000'}},
         'NEW': {{p: '#000000', s: '#FFFFFF'}}, 'NFO': {{p: '#DD0000', s: '#FFFFFF'}},
         'SUN': {{p: '#FF0000', s: '#FFFFFF'}}, 'TOT': {{p: '#FFFFFF', s: '#132257'}}
