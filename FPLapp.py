@@ -304,13 +304,12 @@ if show_graph:
 # --- Data Table Rendering ---
 st.write(f"Showing **{len(display_df)}** players after primary filters.")
 
-# Apply center alignment to all cells and headers
-styled_df = display_df.style.set_properties(**{'text-align': 'center'}).set_table_styles(
+# Apply center alignment and restrict numbers to 2 decimal places
+styled_df = display_df.style.format(precision=2).set_properties(**{'text-align': 'center'}).set_table_styles(
     [{'selector': 'th', 'props': [('text-align', 'center')]}]
 )
 
 st.dataframe(styled_df, use_container_width=True, hide_index=True)
-
 # --- Graph Rendering ---
 if show_graph:
     st.divider()
