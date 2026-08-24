@@ -369,6 +369,6 @@ if show_graph:
             f"Players in graph range: {len(graph_data)}"
         ]
         
-        FPLGraph(graph_data.to_dict('records'), x_axis, y_axis, chart_title, footnotes_list, show_labels=show_labels, width=graph_width, height=graph_heigh)
+        FPLGraph(graph_data.to_dict('records'), x_axis, y_axis, chart_title, footnotes_list, show_labels=show_labels, width=graph_width, height=graph_height)
     else:
         st.info("No players match the combined table and graph axis filters. Try widening your slider ranges.")
