@@ -84,7 +84,7 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
         'COV': {{p: '#00BFFF', s: '#FFFFFF'}}, 'CRY': {{p: '#1B458F', s: '#C4122E'}},
         'EVE': {{p: '#003399', s: '#FFFFFF'}}, 'FUL': {{p: '#FFFFFF', s: '#000000'}},
         'HUL': {{p: '#F5A12D', s: '#000000'}}, 'IPS': {{p: '#0054A6', s: '#FFFFFF'}},
-        'LEE': {{p: '#1D428A', s: '#FFFF00'}}, 'LIV': {{p: '#C8102E', s: '#FFFFFF'}},
+        'LEE': {{p: '#FFFFFF', s: '#1D428A'}}, 'LIV': {{p: '#C8102E', s: '#FFFFFF'}},
         'MCI': {{p: '#6CABDD', s: '#FFFFFF'}}, 'MUN': {{p: '#DA020E', s: '#000000'}},
         'NEW': {{p: '#000000', s: '#FFFFFF'}}, 'NFO': {{p: '#DD0000', s: '#FFFFFF'}},
         'SUN': {{p: '#FF0000', s: '#FFFFFF'}}, 'TOT': {{p: '#FFFFFF', s: '#132257'}}
@@ -122,7 +122,7 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
         .attr("class", "dot-group")
         .attr("transform", d => `translate(${{xScale(d[xName])}}, ${{yScale(d[yName])}})`);
 
-    // Interactive Circles
+    // Interactive Circles with Bounded Tooltips
     dots.append("circle")
         .attr("class", "dot-circle")
         .attr("r", 9)
@@ -136,7 +136,8 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
                           Cost: <b>£${{d['Cost (M)']}}m</b><br><br>
                           ${{xName}}: <b>${{d[xName]}}</b><br>
                           ${{yName}}: <b>${{d[yName]}}</b>`);
-            .on("mousemove", function(event) {{
+        }})
+        .on("mousemove", function(event) {{
             // Get both the width and height of the tooltip dynamically
             const tooltipWidth = tooltip.node().offsetWidth;
             const tooltipHeight = tooltip.node().offsetHeight;
@@ -154,7 +155,7 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
                 yPos = event.pageY - tooltipHeight - 10;
             }}
             
-            // Check Top boundary (just in case)
+            // Check Top boundary
             if (yPos < 0) {{
                 yPos = event.pageY + 20;
             }}
@@ -162,6 +163,11 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
             tooltip.style("left", xPos + "px")
                    .style("top", yPos + "px");
         }})
+        .on("mouseout", function(event, d) {{
+            d3.select(this).attr("stroke", "#ffffff").attr("stroke-width", 1).attr("opacity", 0.9);
+            tooltip.style("opacity", 0);
+        }});
+
     // Only draw the static labels if the toggle is turned ON
     if (showLabels) {{
         dots.append("text")
@@ -316,22 +322,19 @@ if show_graph:
     x_axis = st.sidebar.selectbox("X-Axis", all_numeric_cols, index=all_numeric_cols.index('xGI90') if 'xGI90' in all_numeric_cols else 0, key="x_axis_select")
     y_axis = st.sidebar.selectbox("Y-Axis", all_numeric_cols, index=all_numeric_cols.index('Defcons90') if 'Defcons90' in all_numeric_cols else 1, key="y_axis_select")
 
-
 # --- Data Table Rendering ---
 st.write(f"Showing **{len(display_df)}** players after primary filters.")
 
-# Apply center alignment and restrict numbers to 2 decimal places
-styled_df = display_df.style.format(precision=2).set_properties(**{'text-align': 'center'}).set_table_styles(
-    [{'selector': 'th', 'props': [('text-align', 'center')]}]
-)
+# Format to 2 decimal places to keep it clean while preserving interactivity
+st.dataframe(display_df.style.format(precision=2), use_container_width=True, hide_index=True)
 
-st.dataframe(styled_df, use_container_width=True, hide_index=True)
 # --- Graph Rendering ---
 if show_graph:
     st.divider()
     st.header("Graph Data")
     
-    graph_cols_needed = list(set(['First Name', 'Last Name', 'Web Name', 'Position', 'Team','Cost (M)'] + [x_axis, y_axis]))
+    # Cost (M) added below to ensure tooltip works properly
+    graph_cols_needed = list(set(['First Name', 'Last Name', 'Web Name', 'Position', 'Team', 'Cost (M)'] + [x_axis, y_axis]))
     graph_base_df = filtered_df[[c for c in graph_cols_needed if c in filtered_df.columns]]
 
     # --- Axis Range Sliders directly above the graph ---
