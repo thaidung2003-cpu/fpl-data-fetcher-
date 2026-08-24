@@ -149,11 +149,11 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, width=1300, 
         .attr("fill", d => teamColors[d.Team] ? `url(#grad-${{d.Team}})` : '#2196F3')
         .attr("opacity", 0.95);
 
-    dots.append("text")
+dots.append("text")
         .attr("class", "label")
         .attr("x", 13)
         .attr("y", 4)
-        .text(d => d['Last Name']);
+        .text(d => d['Web Name']);
 
     const footnoteGroup = svg.append("g")
         .attr("transform", `translate(${{margin.left}}, ${{height - 35}})`);
@@ -190,7 +190,7 @@ def get_fpl_data():
             df[col] = pd.to_numeric(df[col], errors='coerce')
 
     base_cols = [
-        'first_name', 'second_name', 'short_name', 'singular_name_short', 'now_cost', 
+        'first_name', 'second_name','web_name', 'short_name', 'singular_name_short', 'now_cost', 
         'total_points', 'selected_by_percent', 'form', 'points_per_game', 'minutes', 'starts',
         'goals_scored', 'assists', 'clean_sheets', 'goals_conceded', 'own_goals', 
         'yellow_cards', 'red_cards', 'saves', 'bonus', 'bps', 'influence', 'creativity', 'threat', 'ict_index', 
@@ -204,7 +204,7 @@ def get_fpl_data():
     df = df[[c for c in cols_to_keep if c in df.columns]]
     
     rename_dict = {
-        'first_name': 'First Name', 'second_name': 'Last Name', 'short_name': 'Team', 'singular_name_short': 'Position', 
+        'first_name': 'First Name', 'second_name': 'Last Name', 'web_name':'Web Name', 'short_name': 'Team', 'singular_name_short': 'Position', 
         'now_cost': 'Cost (M)', 'total_points': 'Total Points', 'selected_by_percent': 'Selected By (%)',
         'points_per_game': 'PPG', 'goals_scored': 'Goals', 'clean_sheets': 'Clean Sheets', 'goals_conceded': 'GC',
         'expected_goals': 'xG', 'expected_assists': 'xA', 'expected_goal_involvements': 'xGI', 
@@ -308,7 +308,7 @@ if show_graph:
     x_axis = st.sidebar.selectbox("X-Axis", all_numeric_cols, index=all_numeric_cols.index('xGI90') if 'xGI90' in all_numeric_cols else 0)
     y_axis = st.sidebar.selectbox("Y-Axis", all_numeric_cols, index=all_numeric_cols.index('Defcons90') if 'Defcons90' in all_numeric_cols else 1)
 
-    graph_cols_needed = list(set(['First Name', 'Last Name', 'Position', 'Team'] + [x_axis, y_axis]))
+   graph_cols_needed = list(set(['First Name', 'Last Name', 'Web Name', 'Position', 'Team'] + [x_axis, y_axis]))
     graph_base_df = filtered_df[[c for c in graph_cols_needed if c in filtered_df.columns]]
 
     col1, col2 = st.columns(2)
