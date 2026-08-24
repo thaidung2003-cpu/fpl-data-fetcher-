@@ -321,7 +321,6 @@ st.sidebar.header("Graph Options")
 show_graph = st.sidebar.toggle("Show Data Graph", value=True, key="show_data_graph_toggle")
 show_labels = st.sidebar.toggle("Show Player Labels on Graph", value=True, key="show_labels_toggle")
 # NEW: Slider to dynamically stretch the chart
-graph_width = st.sidebar.slider("Chart Width (px)", min_value=800, max_value=4000, value=1300, step=100)
 graph_height = st.sidebar.slider("Chart Height (px)", min_value=500, max_value=3000, value=750, step=50)
 if show_graph:
     all_numeric_cols = sorted(filtered_df.select_dtypes(include=['float64', 'int64']).columns.tolist())
