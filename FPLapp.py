@@ -12,7 +12,6 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
     footnotes_json = json.dumps(footnotes)
     show_labels_js = "true" if show_labels else "false"
     
-    # Pass the ordering choices to Javascript
     x_asc_js = "true" if x_order == "Ascending" else "false"
     y_asc_js = "true" if y_order == "Ascending" else "false"
 
@@ -119,7 +118,6 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
     const yMin = d3.min(data, d => d[yName]);
     const yMax = d3.max(data, d => d[yName]);
 
-    // Flip the domains if the user selected 'Descending'
     const xDomain = xAsc ? [xMin * 0.95, xMax * 1.05] : [xMax * 1.05, xMin * 0.95];
     const yDomain = yAsc ? [yMin * 0.95, yMax * 1.05] : [yMax * 1.05, yMin * 0.95];
 
@@ -141,7 +139,6 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
         .attr("class", "dot-group")
         .attr("transform", d => `translate(${{xScale(d[xName])}}, ${{yScale(d[yName])}})`);
 
-    // Interactive Circles with Bounded Tooltips
     dots.append("circle")
         .attr("class", "dot-circle")
         .attr("r", 9)
@@ -190,7 +187,6 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
     </body>
     </html>
     """
-    # width parameter removed from component so it auto-fits the screen dynamically
     st.components.v1.html(d3_code, height=height, scrolling=True)
 
 
@@ -211,13 +207,14 @@ def get_fpl_data():
         if df[col].dtype == 'object' and col not in ['first_name', 'second_name', 'web_name', 'short_name', 'singular_name_short', 'photo', 'status', 'news']:
             df[col] = pd.to_numeric(df[col], errors='coerce')
 
+    # --- ADDED: expected_goals_non_penalty to the base columns ---
     base_cols = [
         'first_name', 'second_name', 'web_name', 'short_name', 'singular_name_short', 'now_cost', 
         'total_points', 'selected_by_percent', 'form', 'points_per_game', 'minutes', 'starts',
         'goals_scored', 'assists', 'clean_sheets', 'goals_conceded', 'own_goals', 
         'yellow_cards', 'red_cards', 'saves', 'bonus', 'bps', 'influence', 'creativity', 'threat', 'ict_index', 
         'expected_goals', 'expected_assists', 'expected_goal_involvements', 'expected_goals_conceded',
-        'defensive_contribution'
+        'defensive_contribution', 'expected_goals_non_penalty'
     ]
     
     native_per_90_cols = [c for c in df.columns if str(c).endswith('_per_90')]
@@ -225,6 +222,7 @@ def get_fpl_data():
     
     df = df[[c for c in cols_to_keep if c in df.columns]]
     
+    # --- ADDED: nPxG mappings to the rename dictionary ---
     rename_dict = {
         'first_name': 'First Name', 'second_name': 'Last Name', 'web_name': 'Web Name', 'short_name': 'Team', 'singular_name_short': 'Position', 
         'now_cost': 'Cost (M)', 'total_points': 'Total Points', 'selected_by_percent': 'Selected By (%)',
@@ -234,7 +232,8 @@ def get_fpl_data():
         'defensive_contribution': 'Defcons', 'starts': 'Starts',
         'expected_goals_per_90': 'xG90', 'expected_assists_per_90': 'xA90', 'expected_goal_involvements_per_90': 'xGI90',
         'expected_goals_conceded_per_90': 'xGC90', 'goals_conceded_per_90': 'GC90', 'saves_per_90': 'Saves90',
-        'starts_per_90': 'Starts90', 'clean_sheets_per_90': 'Clean Sheets90', 'defensive_contribution_per_90': 'Defcons90'
+        'starts_per_90': 'Starts90', 'clean_sheets_per_90': 'Clean Sheets90', 'defensive_contribution_per_90': 'Defcons90',
+        'expected_goals_non_penalty': 'nPxG', 'expected_goals_non_penalty_per_90': 'nPxG90'
     }
     df.rename(columns=rename_dict, inplace=True)
     df.columns = [col.replace('_', ' ').title() if col.islower() else col for col in df.columns]
@@ -312,7 +311,7 @@ core_cols = ['First Name', 'Last Name', 'Web Name', 'Team', 'Position', 'Cost (M
 other_cols = sorted([c for c in filtered_df.columns if c not in core_cols])
 logical_columns = core_cols + other_cols
 
-default_cols = ['Web Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'xGI90', 'Defcons90', 'Minutes Played']
+default_cols = ['Web Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'xGI90', 'nPxG90', 'Minutes Played']
 selected_columns = st.sidebar.multiselect("Select Table Columns", logical_columns, default=[c for c in default_cols if c in logical_columns])
 display_df = filtered_df[selected_columns]
 
@@ -329,8 +328,8 @@ if show_graph:
     
     st.sidebar.subheader("Select Graph Axes")
     
-    # New radio buttons to control Axis sorting order
-    x_axis = st.sidebar.selectbox("X-Axis", all_numeric_cols, index=all_numeric_cols.index('xGI90') if 'xGI90' in all_numeric_cols else 0, key="x_axis_select")
+    # Updated default to nPxG90 for a better open-play offensive metric!
+    x_axis = st.sidebar.selectbox("X-Axis", all_numeric_cols, index=all_numeric_cols.index('nPxG90') if 'nPxG90' in all_numeric_cols else 0, key="x_axis_select")
     x_order = st.sidebar.radio("X-Axis Order", ["Ascending", "Descending"], horizontal=True, key="x_axis_order")
     
     y_axis = st.sidebar.selectbox("Y-Axis", all_numeric_cols, index=all_numeric_cols.index('Defcons90') if 'Defcons90' in all_numeric_cols else 1, key="y_axis_select")
@@ -339,7 +338,6 @@ if show_graph:
 # --- Data Table Rendering ---
 st.write(f"Showing **{len(display_df)}** players after primary filters.")
 
-# Format to 2 decimal places to keep it clean while preserving interactivity
 st.dataframe(display_df.style.format(precision=2), use_container_width=True, hide_index=True)
 
 # --- Graph Rendering ---
@@ -350,7 +348,6 @@ if show_graph:
     graph_cols_needed = list(set(['First Name', 'Last Name', 'Web Name', 'Position', 'Team', 'Cost (M)'] + [x_axis, y_axis]))
     graph_base_df = filtered_df[[c for c in graph_cols_needed if c in filtered_df.columns]]
 
-    # --- Axis Range Sliders directly above the graph ---
     st.markdown("##### Adjust Axis Ranges to Zoom")
     col1, col2 = st.columns(2)
     with col1:
