@@ -310,7 +310,7 @@ if show_graph:
     st.divider()
     st.header("Graph Data")
     
-    graph_cols_needed = list(set(['First Name', 'Last Name', 'Web Name', 'Position', 'Team'] + [x_axis, y_axis]))
+    graph_cols_needed = list(set(['First Name', 'Last Name', 'Web Name', 'Position', 'Team','Cost (M)'] + [x_axis, y_axis]))
     graph_base_df = filtered_df[[c for c in graph_cols_needed if c in filtered_df.columns]]
 
     # --- Axis Range Sliders directly above the graph ---
