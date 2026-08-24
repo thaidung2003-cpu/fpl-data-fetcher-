@@ -191,16 +191,30 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
     """
     st.components.v1.html(d3_code, height=height, scrolling=True)
 
+
 # --- Data Fetching and Processing ---
 @st.cache_data
 def get_understat_npxg():
-    url = "https://understat.com/league/EPL" 
-    response = requests.get(url)
+    url = "https://understat.com/league/EPL"
     
-    match = re.search(r"var playersData = JSON.parse\('(.*?)'\);", response.text)
+    # Headers added to bypass basic scraping blocks
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+    }
+    response = requests.get(url, headers=headers)
+    
+    # Refined regex to safely handle spacing differences in Understat's Javascript
+    match = re.search(r"var playersData\s*=\s*JSON.parse\('([^']+)'\);", response.text)
+    
+    if not match:
+        return pd.DataFrame(columns=['player_name', 'nPxG90'])
+        
     raw_data = json.loads(match.group(1).encode('utf-8').decode('unicode_escape'))
-    
     udf = pd.DataFrame(raw_data)
+    
+    if 'npxG' not in udf.columns or 'time' not in udf.columns:
+        return pd.DataFrame(columns=['player_name', 'nPxG90'])
+
     udf['npxG'] = udf['npxG'].astype(float)
     udf['time'] = udf['time'].astype(int)
     
@@ -269,27 +283,45 @@ def get_fpl_data():
                 df[new_col_90] = np.where(df['Minutes Played'] > 0, (df[col] / df['Minutes Played']) * 90, 0)
                 df[new_col_90] = df[new_col_90].round(2)
 
-    # --- Fetch Understat data and Fuzzy Match ---
+    # --- Fetch Understat data and perform an Advanced Fuzzy Match ---
     try:
         udf = get_understat_npxg()
-        fpl_names = df['Web Name'].dropna().unique().tolist()
-        match_dict = {}
         
-        # Cross-reference Understat names with FPL web names (cutoff ensures realistic matches)
-        for u_name in udf['player_name']:
-            matches = difflib.get_close_matches(u_name, fpl_names, n=1, cutoff=0.4)
-            if matches:
-                match_dict[u_name] = matches[0]
-                
-        udf['matched_web_name'] = udf['player_name'].map(match_dict)
-        udf_clean = udf.dropna(subset=['matched_web_name']).drop_duplicates(subset=['matched_web_name'])
-        
-        # Merge the nPxG90 metric directly into the main DataFrame
-        df = df.merge(udf_clean[['matched_web_name', 'nPxG90']], left_on='Web Name', right_on='matched_web_name', how='left')
-        df['nPxG90'] = df['nPxG90'].fillna(0.0)
-        df.drop(columns=['matched_web_name'], inplace=True)
+        if udf.empty:
+            st.sidebar.warning("Could not locate nPxG data. Setting defaults to 0.0.")
+            df['nPxG90'] = 0.0
+        else:
+            # Create Full Names in the FPL data for highly accurate matching
+            df['Full Name'] = df['First Name'] + ' ' + df['Last Name']
+            
+            web_to_full_map = df.set_index('Web Name')['Full Name'].to_dict()
+            fpl_full_names = df['Full Name'].tolist()
+            fpl_web_names = df['Web Name'].tolist()
+            
+            match_dict = {}
+            for u_name in udf['player_name']:
+                # 1. Prioritize a strict match against the Full Name
+                full_matches = difflib.get_close_matches(u_name, fpl_full_names, n=1, cutoff=0.65)
+                if full_matches:
+                    match_dict[u_name] = full_matches[0]
+                else:
+                    # 2. Fall back to the Web Name if Full Name fails
+                    web_matches = difflib.get_close_matches(u_name, fpl_web_names, n=1, cutoff=0.6)
+                    if web_matches:
+                        match_dict[u_name] = web_to_full_map[web_matches[0]]
+                        
+            udf['matched_full_name'] = udf['player_name'].map(match_dict)
+            udf_clean = udf.dropna(subset=['matched_full_name']).drop_duplicates(subset=['matched_full_name'])
+            
+            # Safely merge into the main DataFrame
+            df = df.merge(udf_clean[['matched_full_name', 'nPxG90']], left_on='Full Name', right_on='matched_full_name', how='left')
+            df['nPxG90'] = df['nPxG90'].fillna(0.0)
+            
+            # Clean up the temporary helper columns
+            df.drop(columns=['matched_full_name', 'Full Name'], inplace=True)
+            
     except Exception as e:
-        st.sidebar.warning("Could not fetch Understat nPxG data.")
+        st.sidebar.warning(f"Error merging Understat data: {e}")
         df['nPxG90'] = 0.0
 
     return df
