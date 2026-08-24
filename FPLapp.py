@@ -7,26 +7,56 @@ import json
 st.set_page_config(layout="wide", page_title="FPL Advanced Analytics")
 
 # --- Custom D3 Visualization Component ---
-def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, width=1300, height=750):
+def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=True, width=1300, height=750):
     data_json = json.dumps(data)
     footnotes_json = json.dumps(footnotes)
+    show_labels_js = "true" if show_labels else "false"
 
     d3_code = f"""
     <!DOCTYPE html>
     <meta charset="utf-8">
     <style>
-    body {{ font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #121212; color: #f2f2f2; margin: 0; padding: 0; }}
+    body {{ font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #121212; color: #f2f2f2; margin: 0; padding: 0; overflow: hidden; }}
     .axis-label {{ font-size: 16px; font-weight: 500; fill: #f2f2f2; }}
     .tick text {{ font-size: 14px; fill: #f2f2f2; }}
     .grid line {{ stroke: #555; stroke-opacity: 0.5; stroke-dasharray: 2, 2; }}
-    .label {{ font-size: 13px; font-weight: 400; fill: #fff; text-shadow: 1px 1px 2px #000; }}
     .title {{ font-size: 20px; font-weight: 500; fill: #fff; text-anchor: middle; }}
     .footnote {{ font-size: 12px; fill: #999; font-style: italic; }}
-    .dot-group text {{ pointer-events: none; }}
-    .dot-circle {{ stroke: #ffffff; stroke-width: 1px; }}
+    .dot-circle {{ stroke: #ffffff; stroke-width: 1px; cursor: pointer; transition: stroke-width 0.1s; }}
+    
+    /* Text Halo for Screenshot Legibility */
+    .label {{ 
+        font-size: 12px; 
+        font-weight: 500; 
+        fill: #ffffff; 
+        paint-order: stroke; 
+        stroke: #121212; 
+        stroke-width: 3px; 
+        stroke-opacity: 0.9; 
+        pointer-events: none; 
+    }}
+
+    /* Interactive Tooltip Styling */
+    .tooltip {{
+        position: absolute;
+        text-align: left;
+        padding: 10px 14px;
+        font-size: 14px;
+        background: rgba(25, 25, 25, 0.95);
+        color: #fff;
+        border: 1px solid #555;
+        border-radius: 6px;
+        pointer-events: none;
+        opacity: 0;
+        z-index: 100;
+        box-shadow: 2px 4px 10px rgba(0,0,0,0.6);
+        line-height: 1.5;
+    }}
+    .tooltip-name {{ font-weight: bold; font-size: 17px; color: #FFEB3B; margin-bottom: 5px; border-bottom: 1px solid #555; padding-bottom: 3px; }}
     </style>
     <body>
     <div id="chart-container"></div>
+    <div id="tooltip" class="tooltip"></div>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script>
     const data = {data_json};
@@ -36,107 +66,55 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, width=1300, 
     const footnotes = {footnotes_json};
     const width = {width};
     const height = {height};
-    const margin = {{top: 50, right: 100, bottom: 90, left: 80}};
+    const showLabels = {show_labels_js};
+    const margin = {{top: 50, right: 60, bottom: 90, left: 80}};
     const innerWidth = width - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
 
     const svg = d3.select("#chart-container").append("svg")
         .attr("width", width)
         .attr("height", height);
+        
+    const tooltip = d3.select("#tooltip");
 
-    // --- 2026/27 Premier League Official Team Colors Mapping (Primary & Secondary) ---
     const teamColors = {{
-        'ARS': {{p: '#EF0107', s: '#FFFFFF'}}, // Arsenal
-        'AVL': {{p: '#670E36', s: '#95BFE5'}}, // Aston Villa
-        'BOU': {{p: '#DA291C', s: '#000000'}}, // Bournemouth
-        'BRE': {{p: '#E30613', s: '#FFFFFF'}}, // Brentford
-        'BHA': {{p: '#0057B8', s: '#FFFFFF'}}, // Brighton
-        'CHE': {{p: '#034694', s: '#FFFFFF'}}, // Chelsea
-        'COV': {{p: '#00BFFF', s: '#FFFFFF'}}, // Coventry City
-        'CRY': {{p: '#1B458F', s: '#C4122E'}}, // Crystal Palace
-        'EVE': {{p: '#003399', s: '#FFFFFF'}}, // Everton
-        'FUL': {{p: '#FFFFFF', s: '#000000'}}, // Fulham
-        'HUL': {{p: '#F5A12D', s: '#000000'}}, // Hull City
-        'IPS': {{p: '#0054A6', s: '#FFFFFF'}}, // Ipswich Town
-        'LEE': {{p: '#FFFFFF', s: '#1D428A'}}, // Leeds United
-        'LIV': {{p: '#C8102E', s: '#FFFFFF'}}, // Liverpool
-        'MCI': {{p: '#6CABDD', s: '#FFFFFF'}}, // Man City
-        'MUN': {{p: '#DA020E', s: '#000000'}}, // Man Utd
-        'NEW': {{p: '#000000', s: '#FFFFFF'}}, // Newcastle
-        'NFO': {{p: '#DD0000', s: '#FFFFFF'}}, // Nottingham Forest
-        'SUN': {{p: '#FF0000', s: '#FFFFFF'}}, // Sunderland
-        'TOT': {{p: '#FFFFFF', s: '#132257'}}  // Tottenham
+        'ARS': {{p: '#EF0107', s: '#FFFFFF'}}, 'AVL': {{p: '#670E36', s: '#95BFE5'}},
+        'BOU': {{p: '#DA291C', s: '#000000'}}, 'BRE': {{p: '#E30613', s: '#FFFFFF'}},
+        'BHA': {{p: '#0057B8', s: '#FFFFFF'}}, 'CHE': {{p: '#034694', s: '#FFFFFF'}},
+        'COV': {{p: '#00BFFF', s: '#FFFFFF'}}, 'CRY': {{p: '#1B458F', s: '#C4122E'}},
+        'EVE': {{p: '#003399', s: '#FFFFFF'}}, 'FUL': {{p: '#FFFFFF', s: '#000000'}},
+        'HUL': {{p: '#F5A12D', s: '#000000'}}, 'IPS': {{p: '#0054A6', s: '#FFFFFF'}},
+        'LEE': {{p: '#FFFFFF', s: '#1D428A'}}, 'LIV': {{p: '#C8102E', s: '#FFFFFF'}},
+        'MCI': {{p: '#6CABDD', s: '#FFFFFF'}}, 'MUN': {{p: '#DA020E', s: '#000000'}},
+        'NEW': {{p: '#000000', s: '#FFFFFF'}}, 'NFO': {{p: '#DD0000', s: '#FFFFFF'}},
+        'SUN': {{p: '#FF0000', s: '#FFFFFF'}}, 'TOT': {{p: '#FFFFFF', s: '#132257'}}
     }};
 
     const defs = svg.append("defs");
-    
-    // Generate a diagonal split gradient for every team
     for (const [team, colors] of Object.entries(teamColors)) {{
-        const grad = defs.append("linearGradient")
-            .attr("id", `grad-${{team}}`)
-            .attr("x1", "0%")
-            .attr("x2", "100%")
-            .attr("y1", "0%")
-            .attr("y2", "100%");
-            
+        const grad = defs.append("linearGradient").attr("id", `grad-${{team}}`).attr("x1", "0%").attr("x2", "100%").attr("y1", "0%").attr("y2", "100%");
         grad.append("stop").attr("offset", "50%").attr("stop-color", colors.p);
         grad.append("stop").attr("offset", "50%").attr("stop-color", colors.s);
     }}
 
-    const chart = svg.append("g")
-        .attr("transform", `translate(${{margin.left}}, ${{margin.top}})`);
+    const chart = svg.append("g").attr("transform", `translate(${{margin.left}}, ${{margin.top}})`);
 
     const xMin = d3.min(data, d => d[xName]);
     const xMax = d3.max(data, d => d[xName]);
     const yMin = d3.min(data, d => d[yName]);
     const yMax = d3.max(data, d => d[yName]);
 
-    const xScale = d3.scaleLinear()
-        .domain([xMin * 0.9, xMax * 1.1])
-        .range([0, innerWidth]);
+    const xScale = d3.scaleLinear().domain([xMin * 0.95, xMax * 1.05]).range([0, innerWidth]);
+    const yScale = d3.scaleLinear().domain([yMin * 0.95, yMax * 1.05]).range([innerHeight, 0]);
 
-    const yScale = d3.scaleLinear()
-        .domain([yMin * 0.9, yMax * 1.1])
-        .range([innerHeight, 0]);
+    chart.append("g").attr("class", "grid").attr("transform", `translate(0, ${{innerHeight}})`).call(d3.axisBottom(xScale).tickSize(-innerHeight).tickFormat(""));
+    chart.append("g").attr("class", "grid").call(d3.axisLeft(yScale).tickSize(-innerWidth).tickFormat(""));
+    chart.append("g").attr("transform", `translate(0, ${{innerHeight}})`).call(d3.axisBottom(xScale).ticks(10));
+    chart.append("g").call(d3.axisLeft(yScale).ticks(10));
 
-    // Grid Lines (Tick formats remain empty so the lines don't print rogue numbers)
-    chart.append("g")
-        .attr("class", "grid")
-        .attr("transform", `translate(0, ${{innerHeight}})`)
-        .call(d3.axisBottom(xScale).tickSize(-innerHeight).tickFormat(""));
-
-    chart.append("g")
-        .attr("class", "grid")
-        .call(d3.axisLeft(yScale).tickSize(-innerWidth).tickFormat(""));
-
-    // Axes (Manual string formatting removed, allowing D3 to auto-scale decimals correctly)
-    chart.append("g")
-        .attr("transform", `translate(0, ${{innerHeight}})`)
-        .call(d3.axisBottom(xScale).ticks(10));
-
-    chart.append("g")
-        .call(d3.axisLeft(yScale).ticks(10));
-
-    svg.append("text")
-        .attr("class", "title")
-        .attr("x", width / 2)
-        .attr("y", 30)
-        .text(titleText);
-
-    chart.append("text")
-        .attr("class", "axis-label")
-        .attr("x", innerWidth / 2)
-        .attr("y", innerHeight + 50)
-        .attr("text-anchor", "middle")
-        .text(`${{xName}}`);
-
-    chart.append("text")
-        .attr("class", "axis-label")
-        .attr("transform", "rotate(-90)")
-        .attr("x", -innerHeight / 2)
-        .attr("y", -50)
-        .attr("text-anchor", "middle")
-        .text(`${{yName}}`);
+    svg.append("text").attr("class", "title").attr("x", width / 2).attr("y", 30).text(titleText);
+    chart.append("text").attr("class", "axis-label").attr("x", innerWidth / 2).attr("y", innerHeight + 45).attr("text-anchor", "middle").text(`${{xName}}`);
+    chart.append("text").attr("class", "axis-label").attr("transform", "rotate(-90)").attr("x", -innerHeight / 2).attr("y", -45).attr("text-anchor", "middle").text(`${{yName}}`);
 
     const dots = chart.selectAll(".dot-group")
         .data(data)
@@ -144,30 +122,42 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, width=1300, 
         .attr("class", "dot-group")
         .attr("transform", d => `translate(${{xScale(d[xName])}}, ${{yScale(d[yName])}})`);
 
-    // Apply the 2-color gradient to the circles
+    // Interactive Circles
     dots.append("circle")
         .attr("class", "dot-circle")
-        .attr("r", 10)
+        .attr("r", 9)
         .attr("fill", d => teamColors[d.Team] ? `url(#grad-${{d.Team}})` : '#2196F3')
-        .attr("opacity", 0.95);
+        .attr("opacity", 0.9)
+        .on("mouseover", function(event, d) {{
+            d3.select(this).attr("stroke", "#FFEB3B").attr("stroke-width", 3).attr("opacity", 1);
+            tooltip.style("opacity", 1)
+                   .html(`<div class='tooltip-name'>${{d['Web Name']}}</div>
+                          Team: <b>${{d.Team}}</b> | Pos: <b>${{d.Position}}</b><br>
+                          Cost: <b>£${{d['Cost (M)']}}m</b><br><br>
+                          ${{xName}}: <b>${{d[xName]}}</b><br>
+                          ${{yName}}: <b>${{d[yName]}}</b>`);
+        }})
+        .on("mousemove", function(event) {{
+            tooltip.style("left", (event.pageX + 20) + "px")
+                   .style("top", (event.pageY - 20) + "px");
+        }})
+        .on("mouseout", function(event, d) {{
+            d3.select(this).attr("stroke", "#ffffff").attr("stroke-width", 1).attr("opacity", 0.9);
+            tooltip.style("opacity", 0);
+        }});
 
-    // Label graph dots with the FPL Web Name
-    dots.append("text")
-        .attr("class", "label")
-        .attr("x", 13)
-        .attr("y", 4)
-        .text(d => d['Web Name']);
+    // Only draw the static labels if the toggle is turned ON
+    if (showLabels) {{
+        dots.append("text")
+            .attr("class", "label")
+            .attr("x", 13)
+            .attr("y", 4)
+            .text(d => d['Web Name']);
+    }}
 
-    const footnoteGroup = svg.append("g")
-        .attr("transform", `translate(${{margin.left}}, ${{height - 35}})`);
-
+    const footnoteGroup = svg.append("g").attr("transform", `translate(${{margin.left}}, ${{height - 35}})`);
     footnotes.forEach((note, i) => {{
-        const text = footnoteGroup.append("text")
-            .attr("class", "footnote")
-            .attr("x", i % 2 === 0 ? 0 : innerWidth)
-            .attr("y", Math.floor(i / 2) * 20)
-            .attr("text-anchor", i % 2 === 0 ? "start" : "end")
-            .text(note);
+        footnoteGroup.append("text").attr("class", "footnote").attr("x", i % 2 === 0 ? 0 : innerWidth).attr("y", Math.floor(i / 2) * 20).attr("text-anchor", i % 2 === 0 ? "start" : "end").text(note);
     }});
     </script>
     </body>
@@ -246,16 +236,14 @@ st.title("FPL Advanced Player Explorer")
 
 # --- Sidebar Filters ---
 st.sidebar.header("Filter Players")
-search_name = st.sidebar.text_input("Look up by Name (separate by commas)")
+search_name = st.sidebar.text_input("Look up by Web Name (separate by commas)")
 selected_teams = st.sidebar.multiselect("Categorize by Team", sorted(df['Team'].unique()))
 
-# Default to showing ALL positions instead of just Defenders
 all_positions = df['Position'].unique().tolist() if not df.empty else []
 selected_positions = st.sidebar.multiselect("Categorize by Position", all_positions, default=all_positions)
 
 max_mins_played = int(df['Minutes Played'].max()) if not df.empty and df['Minutes Played'].max() > 0 else 90
 
-# Default to 0 minutes so nobody is hidden automatically early in the season
 min_minutes = st.sidebar.number_input(
     "Minimum Minutes Played", 
     min_value=0, 
@@ -271,17 +259,13 @@ min_cost, max_cost = st.sidebar.slider(
     step=0.1
 )
 
-# This line is critical! It builds the baseline dataframe before applying filters.
 filtered_df = df.copy()
 
 if search_name:
     search_terms = [term.strip() for term in search_name.split(',') if term.strip()]
     search_pattern = '|'.join(search_terms)
     
-    # Check First Name, Last Name, AND Web Name so you never miss a match
     filtered_df = filtered_df[
-        filtered_df['First Name'].str.contains(search_pattern, case=False, na=False) |
-        filtered_df['Last Name'].str.contains(search_pattern, case=False, na=False) |
         filtered_df['Web Name'].str.contains(search_pattern, case=False, na=False)
     ]
 
@@ -299,13 +283,6 @@ st.sidebar.header("Display Options")
 core_cols = ['First Name', 'Last Name', 'Web Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'Minutes Played']
 other_cols = sorted([c for c in filtered_df.columns if c not in core_cols])
 logical_columns = core_cols + other_cols
-# --- Sidebar Display Options ---
-st.sidebar.header("Display Options")
-
-# Force logical column order: Core info first, then alphabetized stats
-core_cols = ['First Name', 'Last Name', 'Web Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'Minutes Played']
-other_cols = sorted([c for c in filtered_df.columns if c not in core_cols])
-logical_columns = core_cols + other_cols
 
 default_cols = ['Web Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'xGI90', 'Defcons90', 'Minutes Played']
 selected_columns = st.sidebar.multiselect("Select Table Columns", logical_columns, default=[c for c in default_cols if c in logical_columns])
@@ -314,19 +291,30 @@ display_df = filtered_df[selected_columns]
 # --- Graph Options & Axis Selection ---
 st.sidebar.header("Graph Options")
 show_graph = st.sidebar.toggle("Show Data Graph", value=True, key="show_data_graph_toggle")
+show_labels = st.sidebar.toggle("Show Player Labels on Graph", value=True, key="show_labels_toggle")
 
-graph_data = pd.DataFrame()
 if show_graph:
-    # Alphabetized graph axis selectors
     all_numeric_cols = sorted(filtered_df.select_dtypes(include=['float64', 'int64']).columns.tolist())
     
     st.sidebar.subheader("Select Graph Axes")
     x_axis = st.sidebar.selectbox("X-Axis", all_numeric_cols, index=all_numeric_cols.index('xGI90') if 'xGI90' in all_numeric_cols else 0, key="x_axis_select")
     y_axis = st.sidebar.selectbox("Y-Axis", all_numeric_cols, index=all_numeric_cols.index('Defcons90') if 'Defcons90' in all_numeric_cols else 1, key="y_axis_select")
 
+
+# --- Data Table Rendering ---
+st.write(f"Showing **{len(display_df)}** players after primary filters.")
+st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+# --- Graph Rendering ---
+if show_graph:
+    st.divider()
+    st.header("Graph Data")
+    
     graph_cols_needed = list(set(['First Name', 'Last Name', 'Web Name', 'Position', 'Team'] + [x_axis, y_axis]))
     graph_base_df = filtered_df[[c for c in graph_cols_needed if c in filtered_df.columns]]
 
+    # --- Axis Range Sliders directly above the graph ---
+    st.markdown("##### Adjust Axis Ranges to Zoom")
     col1, col2 = st.columns(2)
     with col1:
         x_min_val, x_max_val = float(graph_base_df[x_axis].min()), float(graph_base_df[x_axis].max())
@@ -344,23 +332,17 @@ if show_graph:
         
     graph_data = graph_base_df[(graph_base_df[x_axis] >= x_range[0]) & (graph_base_df[x_axis] <= x_range[1]) & (graph_base_df[y_axis] >= y_range[0]) & (graph_base_df[y_axis] <= y_range[1])]
 
-# --- Data Table Rendering ---
-st.write(f"Showing **{len(display_df)}** players after primary filters.")
-st.dataframe(display_df, use_container_width=True, hide_index=True)
-
-# --- Graph Rendering ---
-if show_graph and not graph_data.empty:
-    st.header("Graph Data")
-    filtered_pos_text = selected_positions[0] if len(selected_positions) == 1 else "Various"
-    chart_title = f"£{min_cost:.1f}m-£{max_cost:.1f}m {filtered_pos_text} Data"
-    
-    footnotes_list = [
-        f"Filtered by position: {', '.join(selected_positions) if selected_positions else 'ALL'}",
-        f"Filtered by minute range: {min_minutes}+",
-        f"Filtered by price range: £{min_cost:.1f}m - £{max_cost:.1f}m",
-        f"Players in graph range: {len(graph_data)}"
-    ]
-    
-    FPLGraph(graph_data.to_dict('records'), x_axis, y_axis, chart_title, footnotes_list, width=1300, height=750)
-elif show_graph and graph_data.empty:
-    st.info("No players match the combined table and graph axis filters. Try widening your slider ranges.")
+    if not graph_data.empty:
+        filtered_pos_text = selected_positions[0] if len(selected_positions) == 1 else "Various"
+        chart_title = f"£{min_cost:.1f}m-£{max_cost:.1f}m {filtered_pos_text} Data"
+        
+        footnotes_list = [
+            f"Filtered by position: {', '.join(selected_positions) if selected_positions else 'ALL'}",
+            f"Filtered by minute range: {min_minutes}+",
+            f"Filtered by price range: £{min_cost:.1f}m - £{max_cost:.1f}m",
+            f"Players in graph range: {len(graph_data)}"
+        ]
+        
+        FPLGraph(graph_data.to_dict('records'), x_axis, y_axis, chart_title, footnotes_list, show_labels=show_labels, width=1300, height=750)
+    else:
+        st.info("No players match the combined table and graph axis filters. Try widening your slider ranges.")
