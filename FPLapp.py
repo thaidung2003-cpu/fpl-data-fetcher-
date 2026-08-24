@@ -44,28 +44,28 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, width=1300, 
         .attr("width", width)
         .attr("height", height);
 
-    // --- Premier League Official Team Colors Mapping (Primary & Secondary) ---
-    const teamColors = {{
-        'ARS': {{p: '#EF0107', s: '#FFFFFF'}},
-        'AVL': {{p: '#670E36', s: '#95BFE5'}},
-        'BOU': {{p: '#DA291C', s: '#000000'}},
-        'BRE': {{p: '#E30613', s: '#FFFFFF'}},
-        'BHA': {{p: '#0057B8', s: '#FFFFFF'}},
-        'CHE': {{p: '#034694', s: '#FFFFFF'}},
-        'CRY': {{p: '#1B458F', s: '#C4122E'}},
-        'EVE': {{p: '#003399', s: '#FFFFFF'}},
-        'FUL': {{p: '#FFFFFF', s: '#000000'}},
-        'IPS': {{p: '#0054A6', s: '#FFFFFF'}},
-        'LEI': {{p: '#0053A0', s: '#FFFFFF'}},
-        'LIV': {{p: '#C8102E', s: '#FFFFFF'}},
-        'MCI': {{p: '#6CABDD', s: '#FFFFFF'}},
-        'MUN': {{p: '#DA020E', s: '#000000'}},
-        'NEW': {{p: '#000000', s: '#FFFFFF'}},
-        'NFO': {{p: '#DD0000', s: '#FFFFFF'}},
-        'SOU': {{p: '#D12421', s: '#FFFFFF'}},
-        'TOT': {{p: '#FFFFFF', s: '#132257'}},
-        'WHU': {{p: '#7A263A', s: '#1BB1E7'}},
-        'WOL': {{p: '#FDB913', s: '#000000'}}
+// --- 2026/27 Premier League Official Team Colors Mapping (Primary & Secondary) ---
+    const teamColors = {
+        'ARS': {p: '#EF0107', s: '#FFFFFF'}, // Arsenal
+        'AVL': {p: '#670E36', s: '#95BFE5'}, // Aston Villa
+        'BOU': {p: '#DA291C', s: '#000000'}, // Bournemouth
+        'BRE': {p: '#E30613', s: '#FFFFFF'}, // Brentford
+        'BHA': {p: '#0057B8', s: '#FFFFFF'}, // Brighton
+        'CHE': {p: '#034694', s: '#FFFFFF'}, // Chelsea
+        'COV': {p: '#00BFFF', s: '#FFFFFF'}, // Coventry City (Sky Blue & White)
+        'CRY': {p: '#1B458F', s: '#C4122E'}, // Crystal Palace
+        'EVE': {p: '#003399', s: '#FFFFFF'}, // Everton
+        'FUL': {p: '#FFFFFF', s: '#000000'}, // Fulham
+        'HUL': {p: '#F5A12D', s: '#000000'}, // Hull City (Amber & Black)
+        'IPS': {p: '#0054A6', s: '#FFFFFF'}, // Ipswich Town
+        'LEE': {p: '#FFFFFF', s: '#1D428A'}, // Leeds United
+        'LIV': {p: '#C8102E', s: '#FFFFFF'}, // Liverpool
+        'MCI': {p: '#6CABDD', s: '#FFFFFF'}, // Man City
+        'MUN': {p: '#DA020E', s: '#000000'}, // Man Utd
+        'NEW': {p: '#000000', s: '#FFFFFF'}, // Newcastle
+        'NFO': {p: '#DD0000', s: '#FFFFFF'}, // Nottingham Forest
+        'SUN': {p: '#FF0000', s: '#FFFFFF'}, // Sunderland (Red & White)
+        'TOT': {p: '#FFFFFF', s: '#132257'}  // Tottenham
     }};
 
     const defs = svg.append("defs");
