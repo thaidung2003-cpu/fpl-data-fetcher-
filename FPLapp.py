@@ -17,6 +17,12 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
     <meta charset="utf-8">
     <style>
     body {{ font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #121212; color: #f2f2f2; margin: 0; padding: 0; overflow: auto; }}
+    /* --- Custom Dark Scrollbars --- */
+    ::-webkit-scrollbar {{ width: 14px; height: 14px; }}
+    ::-webkit-scrollbar-track {{ background: #121212; }}
+    ::-webkit-scrollbar-thumb {{ background: #444; border-radius: 10px; border: 4px solid #121212; }}
+    ::-webkit-scrollbar-thumb:hover {{ background: #666; }}
+    * {{ scrollbar-width: thin; scrollbar-color: #444 #121212; }}
     .axis-label {{ font-size: 16px; font-weight: 500; fill: #f2f2f2; }}
     .tick text {{ font-size: 14px; fill: #f2f2f2; }}
     .grid line {{ stroke: #555; stroke-opacity: 0.5; stroke-dasharray: 2, 2; }}
