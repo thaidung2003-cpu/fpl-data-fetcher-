@@ -302,11 +302,12 @@ show_graph = st.sidebar.toggle("Show Data Graph", value=True, key="show_data_gra
 
 graph_data = pd.DataFrame()
 if show_graph:
-    all_numeric_cols = filtered_df.select_dtypes(include=['float64', 'int64']).columns.tolist()
+    all_numeric_cols = sorted(filtered_df.select_dtypes(include=['float64', 'int64']).columns.tolist())
     
     st.sidebar.subheader("Select Graph Axes")
-    x_axis = st.sidebar.selectbox("X-Axis", all_numeric_cols, index=all_numeric_cols.index('xGI90') if 'xGI90' in all_numeric_cols else 0)
-    y_axis = st.sidebar.selectbox("Y-Axis", all_numeric_cols, index=all_numeric_cols.index('Defcons90') if 'Defcons90' in all_numeric_cols else 1)
+    x_axis = st.sidebar.selectbox("X-Axis", all_numeric_cols, index=all_numeric_cols.index('xGI90') if 'xGI90' in all_numeric_cols else 0, key="x_axis_select")
+    y_axis = st.sidebar.selectbox("Y-Axis", all_numeric_cols, index=all_numeric_cols.index('Defcons90') if 'Defcons90' in all_numeric_cols else 1, key="y_axis_select")
+
     graph_cols_needed = list(set(['First Name', 'Last Name', 'Web Name', 'Position', 'Team'] + [x_axis, y_axis]))
     graph_base_df = filtered_df[[c for c in graph_cols_needed if c in filtered_df.columns]]
 
