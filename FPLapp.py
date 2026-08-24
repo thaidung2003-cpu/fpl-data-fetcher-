@@ -44,7 +44,7 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, width=1300, 
         .attr("width", width)
         .attr("height", height);
 
-// --- 2026/27 Premier League Official Team Colors Mapping (Primary & Secondary) ---
+    // --- 2026/27 Premier League Official Team Colors Mapping (Primary & Secondary) ---
     const teamColors = {{
         'ARS': {{p: '#EF0107', s: '#FFFFFF'}}, // Arsenal
         'AVL': {{p: '#670E36', s: '#95BFE5'}}, // Aston Villa
@@ -99,6 +99,7 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, width=1300, 
         .domain([yMin * 0.9, yMax * 1.1])
         .range([innerHeight, 0]);
 
+    // Grid Lines (Tick formats remain empty so the lines don't print rogue numbers)
     chart.append("g")
         .attr("class", "grid")
         .attr("transform", `translate(0, ${{innerHeight}})`)
@@ -108,6 +109,7 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, width=1300, 
         .attr("class", "grid")
         .call(d3.axisLeft(yScale).tickSize(-innerWidth).tickFormat(""));
 
+    // Axes (Manual string formatting removed, allowing D3 to auto-scale decimals correctly)
     chart.append("g")
         .attr("transform", `translate(0, ${{innerHeight}})`)
         .call(d3.axisBottom(xScale).ticks(10));
@@ -149,7 +151,8 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, width=1300, 
         .attr("fill", d => teamColors[d.Team] ? `url(#grad-${{d.Team}})` : '#2196F3')
         .attr("opacity", 0.95);
 
-dots.append("text")
+    // Label graph dots with the FPL Web Name
+    dots.append("text")
         .attr("class", "label")
         .attr("x", 13)
         .attr("y", 4)
@@ -172,6 +175,7 @@ dots.append("text")
     """
     st.components.v1.html(d3_code, width=width, height=height, scrolling=False)
 
+
 # --- Data Fetching and Processing ---
 @st.cache_data
 def get_fpl_data():
@@ -186,11 +190,11 @@ def get_fpl_data():
     df = df.merge(positions[['id', 'singular_name_short']], left_on='element_type', right_on='id', how='left')
     
     for col in df.columns:
-        if df[col].dtype == 'object' and col not in ['first_name', 'second_name', 'short_name', 'singular_name_short', 'photo', 'web_name', 'status', 'news']:
+        if df[col].dtype == 'object' and col not in ['first_name', 'second_name', 'web_name', 'short_name', 'singular_name_short', 'photo', 'status', 'news']:
             df[col] = pd.to_numeric(df[col], errors='coerce')
 
     base_cols = [
-        'first_name', 'second_name','web_name', 'short_name', 'singular_name_short', 'now_cost', 
+        'first_name', 'second_name', 'web_name', 'short_name', 'singular_name_short', 'now_cost', 
         'total_points', 'selected_by_percent', 'form', 'points_per_game', 'minutes', 'starts',
         'goals_scored', 'assists', 'clean_sheets', 'goals_conceded', 'own_goals', 
         'yellow_cards', 'red_cards', 'saves', 'bonus', 'bps', 'influence', 'creativity', 'threat', 'ict_index', 
@@ -204,7 +208,7 @@ def get_fpl_data():
     df = df[[c for c in cols_to_keep if c in df.columns]]
     
     rename_dict = {
-        'first_name': 'First Name', 'second_name': 'Last Name', 'web_name':'Web Name', 'short_name': 'Team', 'singular_name_short': 'Position', 
+        'first_name': 'First Name', 'second_name': 'Last Name', 'web_name': 'Web Name', 'short_name': 'Team', 'singular_name_short': 'Position', 
         'now_cost': 'Cost (M)', 'total_points': 'Total Points', 'selected_by_percent': 'Selected By (%)',
         'points_per_game': 'PPG', 'goals_scored': 'Goals', 'clean_sheets': 'Clean Sheets', 'goals_conceded': 'GC',
         'expected_goals': 'xG', 'expected_assists': 'xA', 'expected_goal_involvements': 'xGI', 
@@ -242,7 +246,7 @@ st.title("FPL Advanced Player Explorer")
 
 # --- Sidebar Filters ---
 st.sidebar.header("Filter Players")
-search_name = st.sidebar.text_input("Look up by Last Name")
+search_name = st.sidebar.text_input("Look up by Name (separate by commas)")
 selected_teams = st.sidebar.multiselect("Categorize by Team", sorted(df['Team'].unique()))
 selected_positions = st.sidebar.multiselect("Categorize by Position", df['Position'].unique(), default=["DEF"])
 
@@ -257,12 +261,25 @@ min_minutes = st.sidebar.number_input(
     step=10 if max_mins_played < 200 else 100
 )
 
-min_cost, max_cost = st.sidebar.slider("Cost (M)", float(df['Cost (M)'].min()), float(df['Cost (M)'].max()), (float(df['Cost (M)'].min()), float(df['Cost (M)'].max())), step=0.1)
+min_cost, max_cost = st.sidebar.slider(
+    "Cost (M)", 
+    float(df['Cost (M)'].min()), float(df['Cost (M)'].max()), 
+    (float(df['Cost (M)'].min()), float(df['Cost (M)'].max())), 
+    step=0.1
+)
 
 filtered_df = df.copy()
 
 if search_name:
-    filtered_df = filtered_df[filtered_df['Last Name'].str.contains(search_name, case=False)]
+    # Multi-search: Split by commas, clear whitespace, build Regex pattern
+    search_terms = [term.strip() for term in search_name.split(',') if term.strip()]
+    search_pattern = '|'.join(search_terms)
+    
+    filtered_df = filtered_df[
+        filtered_df['Last Name'].str.contains(search_pattern, case=False, na=False) |
+        filtered_df['Web Name'].str.contains(search_pattern, case=False, na=False)
+    ]
+
 if selected_teams:
     filtered_df = filtered_df[filtered_df['Team'].isin(selected_teams)]
 if selected_positions:
@@ -274,27 +291,14 @@ filtered_df = filtered_df[filtered_df['Minutes Played'] >= min_minutes]
 # --- Sidebar Display Options ---
 st.sidebar.header("Display Options")
 
-# Force a logical order: Core stats first, then everything else sorted alphabetically
-core_cols = ['First Name', 'Last Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'Minutes Played']
+# Force logical column order: Core info first, then alphabetized stats
+core_cols = ['First Name', 'Last Name', 'Web Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'Minutes Played']
 other_cols = sorted([c for c in filtered_df.columns if c not in core_cols])
 logical_columns = core_cols + other_cols
 
-default_cols = ['First Name', 'Last Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'xGI90', 'Defcons90', 'Minutes Played']
+default_cols = ['Web Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'xGI90', 'Defcons90', 'Minutes Played']
 selected_columns = st.sidebar.multiselect("Select Table Columns", logical_columns, default=[c for c in default_cols if c in logical_columns])
 display_df = filtered_df[selected_columns]
-
-# --- Graph Options & Axis Selection ---
-st.sidebar.header("Graph Options")
-show_graph = st.sidebar.toggle("Show Data Graph", value=True)
-
-graph_data = pd.DataFrame()
-if show_graph:
-    # Sort the graph axis dropdowns alphabetically as well
-    all_numeric_cols = sorted(filtered_df.select_dtypes(include=['float64', 'int64']).columns.tolist())
-    
-    st.sidebar.subheader("Select Graph Axes")
-    x_axis = st.sidebar.selectbox("X-Axis", all_numeric_cols, index=all_numeric_cols.index('xGI90') if 'xGI90' in all_numeric_cols else 0)
-    y_axis = st.sidebar.selectbox("Y-Axis", all_numeric_cols, index=all_numeric_cols.index('Defcons90') if 'Defcons90' in all_numeric_cols else 1)
 
 # --- Graph Options & Axis Selection ---
 st.sidebar.header("Graph Options")
@@ -302,6 +306,7 @@ show_graph = st.sidebar.toggle("Show Data Graph", value=True, key="show_data_gra
 
 graph_data = pd.DataFrame()
 if show_graph:
+    # Alphabetized graph axis selectors
     all_numeric_cols = sorted(filtered_df.select_dtypes(include=['float64', 'int64']).columns.tolist())
     
     st.sidebar.subheader("Select Graph Axes")
@@ -316,7 +321,8 @@ if show_graph:
         x_min_val, x_max_val = float(graph_base_df[x_axis].min()), float(graph_base_df[x_axis].max())
         if x_min_val == x_max_val:
             x_max_val += 0.01
-        x_range = st.slider(f"{x_axis} Range", x_min_val, x_max_val, (x_min_val, x_max_val), step=0.01)
+        x_step = 0.01 if (x_max_val - x_min_val) < 50 else 1.0
+        x_range = st.slider(f"{x_axis} Range", x_min_val, x_max_val, (x_min_val, x_max_val), step=x_step)
     
     with col2:
         y_min_val, y_max_val = float(graph_base_df[y_axis].min()), float(graph_base_df[y_axis].max())
@@ -328,7 +334,7 @@ if show_graph:
     graph_data = graph_base_df[(graph_base_df[x_axis] >= x_range[0]) & (graph_base_df[x_axis] <= x_range[1]) & (graph_base_df[y_axis] >= y_range[0]) & (graph_base_df[y_axis] <= y_range[1])]
 
 # --- Data Table Rendering ---
-st.write(f"Showing {len(display_df)} players after primary filters.")
+st.write(f"Showing **{len(display_df)}** players after primary filters.")
 st.dataframe(display_df, use_container_width=True, hide_index=True)
 
 # --- Graph Rendering ---
