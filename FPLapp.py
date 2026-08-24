@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import requests
 import json
+import re
+import difflib
 
 st.set_page_config(layout="wide", page_title="FPL Advanced Analytics")
 
@@ -189,8 +191,24 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
     """
     st.components.v1.html(d3_code, height=height, scrolling=True)
 
-
 # --- Data Fetching and Processing ---
+@st.cache_data
+def get_understat_npxg():
+    url = "https://understat.com/league/EPL" 
+    response = requests.get(url)
+    
+    match = re.search(r"var playersData = JSON.parse\('(.*?)'\);", response.text)
+    raw_data = json.loads(match.group(1).encode('utf-8').decode('unicode_escape'))
+    
+    udf = pd.DataFrame(raw_data)
+    udf['npxG'] = udf['npxG'].astype(float)
+    udf['time'] = udf['time'].astype(int)
+    
+    udf['nPxG90'] = np.where(udf['time'] > 0, (udf['npxG'] / udf['time']) * 90, 0)
+    udf['nPxG90'] = udf['nPxG90'].round(2)
+    
+    return udf[['player_name', 'nPxG90']]
+
 @st.cache_data
 def get_fpl_data():
     url = "https://fantasy.premierleague.com/api/bootstrap-static/"
@@ -207,14 +225,13 @@ def get_fpl_data():
         if df[col].dtype == 'object' and col not in ['first_name', 'second_name', 'web_name', 'short_name', 'singular_name_short', 'photo', 'status', 'news']:
             df[col] = pd.to_numeric(df[col], errors='coerce')
 
-    # --- ADDED: expected_goals_non_penalty to the base columns ---
     base_cols = [
         'first_name', 'second_name', 'web_name', 'short_name', 'singular_name_short', 'now_cost', 
         'total_points', 'selected_by_percent', 'form', 'points_per_game', 'minutes', 'starts',
         'goals_scored', 'assists', 'clean_sheets', 'goals_conceded', 'own_goals', 
         'yellow_cards', 'red_cards', 'saves', 'bonus', 'bps', 'influence', 'creativity', 'threat', 'ict_index', 
         'expected_goals', 'expected_assists', 'expected_goal_involvements', 'expected_goals_conceded',
-        'defensive_contribution', 'expected_goals_non_penalty'
+        'defensive_contribution'
     ]
     
     native_per_90_cols = [c for c in df.columns if str(c).endswith('_per_90')]
@@ -222,7 +239,6 @@ def get_fpl_data():
     
     df = df[[c for c in cols_to_keep if c in df.columns]]
     
-    # --- ADDED: nPxG mappings to the rename dictionary ---
     rename_dict = {
         'first_name': 'First Name', 'second_name': 'Last Name', 'web_name': 'Web Name', 'short_name': 'Team', 'singular_name_short': 'Position', 
         'now_cost': 'Cost (M)', 'total_points': 'Total Points', 'selected_by_percent': 'Selected By (%)',
@@ -232,8 +248,7 @@ def get_fpl_data():
         'defensive_contribution': 'Defcons', 'starts': 'Starts',
         'expected_goals_per_90': 'xG90', 'expected_assists_per_90': 'xA90', 'expected_goal_involvements_per_90': 'xGI90',
         'expected_goals_conceded_per_90': 'xGC90', 'goals_conceded_per_90': 'GC90', 'saves_per_90': 'Saves90',
-        'starts_per_90': 'Starts90', 'clean_sheets_per_90': 'Clean Sheets90', 'defensive_contribution_per_90': 'Defcons90',
-        'expected_goals_non_penalty': 'nPxG', 'expected_goals_non_penalty_per_90': 'nPxG90'
+        'starts_per_90': 'Starts90', 'clean_sheets_per_90': 'Clean Sheets90', 'defensive_contribution_per_90': 'Defcons90'
     }
     df.rename(columns=rename_dict, inplace=True)
     df.columns = [col.replace('_', ' ').title() if col.islower() else col for col in df.columns]
@@ -253,6 +268,29 @@ def get_fpl_data():
             if new_col_90 not in df.columns:
                 df[new_col_90] = np.where(df['Minutes Played'] > 0, (df[col] / df['Minutes Played']) * 90, 0)
                 df[new_col_90] = df[new_col_90].round(2)
+
+    # --- Fetch Understat data and Fuzzy Match ---
+    try:
+        udf = get_understat_npxg()
+        fpl_names = df['Web Name'].dropna().unique().tolist()
+        match_dict = {}
+        
+        # Cross-reference Understat names with FPL web names (cutoff ensures realistic matches)
+        for u_name in udf['player_name']:
+            matches = difflib.get_close_matches(u_name, fpl_names, n=1, cutoff=0.4)
+            if matches:
+                match_dict[u_name] = matches[0]
+                
+        udf['matched_web_name'] = udf['player_name'].map(match_dict)
+        udf_clean = udf.dropna(subset=['matched_web_name']).drop_duplicates(subset=['matched_web_name'])
+        
+        # Merge the nPxG90 metric directly into the main DataFrame
+        df = df.merge(udf_clean[['matched_web_name', 'nPxG90']], left_on='Web Name', right_on='matched_web_name', how='left')
+        df['nPxG90'] = df['nPxG90'].fillna(0.0)
+        df.drop(columns=['matched_web_name'], inplace=True)
+    except Exception as e:
+        st.sidebar.warning("Could not fetch Understat nPxG data.")
+        df['nPxG90'] = 0.0
 
     return df
 
@@ -311,7 +349,7 @@ core_cols = ['First Name', 'Last Name', 'Web Name', 'Team', 'Position', 'Cost (M
 other_cols = sorted([c for c in filtered_df.columns if c not in core_cols])
 logical_columns = core_cols + other_cols
 
-default_cols = ['Web Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'xGI90', 'nPxG90', 'Minutes Played']
+default_cols = ['Web Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'nPxG90', 'Defcons90', 'Minutes Played']
 selected_columns = st.sidebar.multiselect("Select Table Columns", logical_columns, default=[c for c in default_cols if c in logical_columns])
 display_df = filtered_df[selected_columns]
 
@@ -328,7 +366,6 @@ if show_graph:
     
     st.sidebar.subheader("Select Graph Axes")
     
-    # Updated default to nPxG90 for a better open-play offensive metric!
     x_axis = st.sidebar.selectbox("X-Axis", all_numeric_cols, index=all_numeric_cols.index('nPxG90') if 'nPxG90' in all_numeric_cols else 0, key="x_axis_select")
     x_order = st.sidebar.radio("X-Axis Order", ["Ascending", "Descending"], horizontal=True, key="x_axis_order")
     
