@@ -298,7 +298,7 @@ if show_graph:
 
 # --- Graph Options & Axis Selection ---
 st.sidebar.header("Graph Options")
-show_graph = st.sidebar.toggle("Show Data Graph", value=True)
+show_graph = st.sidebar.toggle("Show Data Graph", value=True, key="show_data_graph_toggle")
 
 graph_data = pd.DataFrame()
 if show_graph:
