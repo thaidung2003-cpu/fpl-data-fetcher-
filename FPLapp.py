@@ -7,22 +7,28 @@ import json
 st.set_page_config(layout="wide", page_title="FPL Advanced Analytics")
 
 # --- Custom D3 Visualization Component ---
-def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=True, width=1300, height=750):
+def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=True, x_order="Ascending", y_order="Ascending", width=1300, height=750):
     data_json = json.dumps(data)
     footnotes_json = json.dumps(footnotes)
     show_labels_js = "true" if show_labels else "false"
+    
+    # Pass the ordering choices to Javascript
+    x_asc_js = "true" if x_order == "Ascending" else "false"
+    y_asc_js = "true" if y_order == "Ascending" else "false"
 
     d3_code = f"""
     <!DOCTYPE html>
     <meta charset="utf-8">
     <style>
     body {{ font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #121212; color: #f2f2f2; margin: 0; padding: 0; overflow: auto; }}
+    
     /* --- Custom Dark Scrollbars --- */
     ::-webkit-scrollbar {{ width: 14px; height: 14px; }}
     ::-webkit-scrollbar-track {{ background: #121212; }}
     ::-webkit-scrollbar-thumb {{ background: #444; border-radius: 10px; border: 4px solid #121212; }}
     ::-webkit-scrollbar-thumb:hover {{ background: #666; }}
     * {{ scrollbar-width: thin; scrollbar-color: #444 #121212; }}
+
     .axis-label {{ font-size: 16px; font-weight: 500; fill: #f2f2f2; }}
     .tick text {{ font-size: 14px; fill: #f2f2f2; }}
     .grid line {{ stroke: #555; stroke-opacity: 0.5; stroke-dasharray: 2, 2; }}
@@ -73,6 +79,9 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
     const width = {width};
     const height = {height};
     const showLabels = {show_labels_js};
+    const xAsc = {x_asc_js};
+    const yAsc = {y_asc_js};
+    
     const margin = {{top: 50, right: 60, bottom: 90, left: 80}};
     const innerWidth = width - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
@@ -110,8 +119,12 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
     const yMin = d3.min(data, d => d[yName]);
     const yMax = d3.max(data, d => d[yName]);
 
-    const xScale = d3.scaleLinear().domain([xMin * 0.95, xMax * 1.05]).range([0, innerWidth]);
-    const yScale = d3.scaleLinear().domain([yMin * 0.95, yMax * 1.05]).range([innerHeight, 0]);
+    // Flip the domains if the user selected 'Descending'
+    const xDomain = xAsc ? [xMin * 0.95, xMax * 1.05] : [xMax * 1.05, xMin * 0.95];
+    const yDomain = yAsc ? [yMin * 0.95, yMax * 1.05] : [yMax * 1.05, yMin * 0.95];
+
+    const xScale = d3.scaleLinear().domain(xDomain).range([0, innerWidth]);
+    const yScale = d3.scaleLinear().domain(yDomain).range([innerHeight, 0]);
 
     chart.append("g").attr("class", "grid").attr("transform", `translate(0, ${{innerHeight}})`).call(d3.axisBottom(xScale).tickSize(-innerHeight).tickFormat(""));
     chart.append("g").attr("class", "grid").call(d3.axisLeft(yScale).tickSize(-innerWidth).tickFormat(""));
@@ -144,27 +157,14 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
                           ${{yName}}: <b>${{d[yName]}}</b>`);
         }})
         .on("mousemove", function(event) {{
-            // Get both the width and height of the tooltip dynamically
             const tooltipWidth = tooltip.node().offsetWidth;
             const tooltipHeight = tooltip.node().offsetHeight;
-            
             let xPos = event.pageX + 20;
             let yPos = event.pageY - 20;
             
-            // Check Right boundary
-            if (xPos + tooltipWidth > window.innerWidth) {{
-                xPos = event.pageX - tooltipWidth - 20;
-            }}
-            
-            // Check Bottom boundary
-            if (yPos + tooltipHeight > window.innerHeight) {{
-                yPos = event.pageY - tooltipHeight - 10;
-            }}
-            
-            // Check Top boundary
-            if (yPos < 0) {{
-                yPos = event.pageY + 20;
-            }}
+            if (xPos + tooltipWidth > window.innerWidth) {{ xPos = event.pageX - tooltipWidth - 20; }}
+            if (yPos + tooltipHeight > window.innerHeight) {{ yPos = event.pageY - tooltipHeight - 10; }}
+            if (yPos < 0) {{ yPos = event.pageY + 20; }}
             
             tooltip.style("left", xPos + "px")
                    .style("top", yPos + "px");
@@ -174,7 +174,6 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
             tooltip.style("opacity", 0);
         }});
 
-    // Only draw the static labels if the toggle is turned ON
     if (showLabels) {{
         dots.append("text")
             .attr("class", "label")
@@ -191,7 +190,8 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
     </body>
     </html>
     """
-    st.components.v1.html(d3_code, width=width, height=height, scrolling=True)
+    # width parameter removed from component so it auto-fits the screen dynamically
+    st.components.v1.html(d3_code, height=height, scrolling=True)
 
 
 # --- Data Fetching and Processing ---
@@ -320,14 +320,21 @@ display_df = filtered_df[selected_columns]
 st.sidebar.header("Graph Options")
 show_graph = st.sidebar.toggle("Show Data Graph", value=True, key="show_data_graph_toggle")
 show_labels = st.sidebar.toggle("Show Player Labels on Graph", value=True, key="show_labels_toggle")
-# NEW: Slider to dynamically stretch the chart
+
+graph_width = st.sidebar.slider("Chart Width (px)", min_value=800, max_value=4000, value=1300, step=100)
 graph_height = st.sidebar.slider("Chart Height (px)", min_value=500, max_value=3000, value=750, step=50)
+
 if show_graph:
     all_numeric_cols = sorted(filtered_df.select_dtypes(include=['float64', 'int64']).columns.tolist())
     
     st.sidebar.subheader("Select Graph Axes")
+    
+    # New radio buttons to control Axis sorting order
     x_axis = st.sidebar.selectbox("X-Axis", all_numeric_cols, index=all_numeric_cols.index('xGI90') if 'xGI90' in all_numeric_cols else 0, key="x_axis_select")
+    x_order = st.sidebar.radio("X-Axis Order", ["Ascending", "Descending"], horizontal=True, key="x_axis_order")
+    
     y_axis = st.sidebar.selectbox("Y-Axis", all_numeric_cols, index=all_numeric_cols.index('Defcons90') if 'Defcons90' in all_numeric_cols else 1, key="y_axis_select")
+    y_order = st.sidebar.radio("Y-Axis Order", ["Ascending", "Descending"], horizontal=True, key="y_axis_order")
 
 # --- Data Table Rendering ---
 st.write(f"Showing **{len(display_df)}** players after primary filters.")
@@ -340,7 +347,6 @@ if show_graph:
     st.divider()
     st.header("Graph Data")
     
-    # Cost (M) added below to ensure tooltip works properly
     graph_cols_needed = list(set(['First Name', 'Last Name', 'Web Name', 'Position', 'Team', 'Cost (M)'] + [x_axis, y_axis]))
     graph_base_df = filtered_df[[c for c in graph_cols_needed if c in filtered_df.columns]]
 
@@ -374,6 +380,17 @@ if show_graph:
             f"Players in graph range: {len(graph_data)}"
         ]
         
-        FPLGraph(graph_data.to_dict('records'), x_axis, y_axis, chart_title, footnotes_list, show_labels=show_labels, height=graph_height)
+        FPLGraph(
+            graph_data.to_dict('records'), 
+            x_axis, 
+            y_axis, 
+            chart_title, 
+            footnotes_list, 
+            show_labels=show_labels, 
+            x_order=x_order, 
+            y_order=y_order, 
+            width=graph_width, 
+            height=graph_height
+        )
     else:
         st.info("No players match the combined table and graph axis filters. Try widening your slider ranges.")
