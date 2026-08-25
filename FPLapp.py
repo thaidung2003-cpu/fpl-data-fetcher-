@@ -256,11 +256,11 @@ def fetch_fpl_data():
             library(panna)
             pb_download_opta()
             
-            stats <- load_opta_stats("EPL", "2024-2025")
+            stats <- load_opta_stats("EPL", "2026-2027")
             write.csv(stats, "temp_stats.csv", row.names=FALSE)
             
             tryCatch({
-                xmetrics <- load_opta_xmetrics("EPL", "2024-2025")
+                xmetrics <- load_opta_xmetrics("EPL", "2026-2027")
                 write.csv(xmetrics, "temp_xmetrics.csv", row.names=FALSE)
             }, error = function(e) {
                 # Silently skip if xmetrics doesn't exist
