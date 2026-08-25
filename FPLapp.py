@@ -234,6 +234,7 @@ def fetch_fpl_data():
         if "GITHUB_TOKEN" in st.secrets:
             headers["Authorization"] = f"token {st.secrets['GITHUB_TOKEN']}"
             
+        # Pointing to the specific 'pannadata' storage repository!
         api_url = "https://api.github.com/repos/peteowen1/pannadata/releases/tags/opta-latest"
         
         response = requests.get(api_url, headers=headers)
@@ -250,7 +251,7 @@ def fetch_fpl_data():
         if not stats_url:
             raise ValueError("Could not find player_stats in the release assets.")
             
-        # Download and read player_stats
+        # Download and read player_stats using io.BytesIO
         stats_resp = requests.get(stats_url, headers=headers)
         opta_df = pd.read_parquet(io.BytesIO(stats_resp.content))
         
