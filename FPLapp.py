@@ -392,7 +392,7 @@ all_numeric_cols = filtered_df.select_dtypes(include=['float64', 'int64']).colum
 st.sidebar.header("Display Options")
 st.sidebar.markdown("Customize Table Columns:")
 
-selected_columns = ['First Name', 'Last Name', 'Web Name', 'Team', 'Position'] # Core identifiers locked in
+selected_columns = ['Web Name', 'Team', 'Position'] # Removed First/Last Name, locking only Web Name
 default_table_cols = ['Cost (M)', 'Total Points', 'Minutes Played', 'xG', 'xA', 'NPxG']
 
 with st.sidebar.expander("⚙️ Select Stats by Category", expanded=False):
