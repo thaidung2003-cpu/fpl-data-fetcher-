@@ -223,39 +223,33 @@ def get_fpl_data():
             if df[col].dtype == 'object' and col not in ['first_name', 'second_name', 'web_name', 'short_name', 'singular_name_short', 'photo', 'status', 'news']:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        # Drop truly useless metadata columns
-        useless_cols = ['id', 'team', 'element_type', 'team_code', 'chance_of_playing_next_round', 'chance_of_playing_this_round', 'photo', 'status', 'news', 'news_added', 'squad_number', 'ep_this', 'ep_next', 'in_dreamteam']
+        # Drop non-performance/misc/metadata columns
+        useless_cols = [
+            'id', 'team', 'element_type', 'team_code', 'chance_of_playing_next_round', 'chance_of_playing_this_round', 
+            'photo', 'status', 'news', 'news_added', 'squad_number', 'ep_this', 'ep_next', 'in_dreamteam',
+            'selected_by_percent', 'form', 'points_per_game', 'transfers_in', 'transfers_out', 'transfers_in_event',
+            'transfers_out_event', 'value_form', 'value_season', 'cost_change_start', 'cost_change_event',
+            'cost_change_start_fall', 'cost_change_event_fall', 'yellow_cards', 'red_cards', 'penalties_missed', 'own_goals'
+        ]
         df.drop(columns=[c for c in useless_cols if c in df.columns], inplace=True)
         
-        # Format explicitly known columns
+        # Rename essential performance columns
         rename_dict = {
             'first_name': 'First Name', 'second_name': 'Last Name', 'web_name': 'Web Name', 'short_name': 'Team', 'singular_name_short': 'Position', 
-            'now_cost': 'Cost (M)', 'total_points': 'Total Points', 'selected_by_percent': 'Selected By (%)',
-            'points_per_game': 'PPG', 'goals_scored': 'Goals', 'clean_sheets': 'Clean Sheets', 'goals_conceded': 'GC',
-            'minutes': 'Minutes Played', 'starts': 'Starts',
-            'expected_goals': 'xG', 'expected_assists': 'xA', 'expected_goal_involvements': 'xGI',
-            'expected_goals_conceded': 'xGC', 'bonus': 'Bonus', 'bps': 'BPS', 'saves': 'Saves',
-            'influence': 'Influence', 'creativity': 'Creativity', 'threat': 'Threat', 'ict_index': 'ICT Index',
-            'yellow_cards': 'Yellow Cards', 'red_cards': 'Red Cards', 'penalties_saved': 'Penalties Saved',
-            'penalties_missed': 'Penalties Missed', 'own_goals': 'Own Goals'
+            'now_cost': 'Cost (M)', 'total_points': 'Total Points', 'goals_scored': 'Goals', 'clean_sheets': 'Clean Sheets', 'goals_conceded': 'GC',
+            'minutes': 'Minutes Played', 'starts': 'Starts', 'expected_goals': 'xG', 'expected_assists': 'xA', 
+            'expected_goal_involvements': 'xGI', 'expected_goals_conceded': 'xGC', 'bonus': 'Bonus', 'bps': 'BPS', 
+            'saves': 'Saves', 'penalties_saved': 'Penalties Saved', 'influence': 'Influence', 'creativity': 'Creativity', 
+            'threat': 'Threat', 'ict_index': 'ICT Index'
         }
         df.rename(columns=rename_dict, inplace=True)
-        
-        # Dynamically format any remaining unknown columns neatly
-        new_cols = []
-        for c in df.columns:
-            if c not in rename_dict.values():
-                clean_name = str(c).replace('_', ' ').title()
-                new_cols.append(clean_name)
-            else:
-                new_cols.append(c)
-        df.columns = new_cols
         
         if 'Cost (M)' in df.columns:
             df['Cost (M)'] = df['Cost (M)'] / 10 
         if 'Minutes Played' in df.columns:
             df['Minutes Played'] = pd.to_numeric(df['Minutes Played'], errors='coerce').fillna(0)
             
+        # Calculate Per-90 metrics
         for col in ['xG', 'xA', 'xGI', 'xGC']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
@@ -370,28 +364,22 @@ if not filtered_df.empty and 'Cost (M)' in filtered_df.columns:
 if not filtered_df.empty and 'Minutes Played' in filtered_df.columns:
     filtered_df = filtered_df[filtered_df['Minutes Played'] >= min_minutes]
 
-# --- Dynamic Stat Categorization ---
+# --- Refined Performance Stat Categories ---
 stat_categories = {
-    "Value & Basics": ['Cost (M)', 'Total Points', 'Minutes Played', 'Selected By (%)', 'Form', 'PPG', 'Starts'],
-    "Expected Metrics": ['xG', 'xA', 'xGI', 'NPxG', 'xGC', 'xG90', 'xA90', 'xGI90', 'NPxG90', 'xGC90'],
-    "Actual Output": ['Goals', 'Assists', 'Clean Sheets', 'GC', 'Saves'],
-    "BPS & ICT Index": ['Bonus', 'BPS', 'Influence', 'Creativity', 'Threat', 'ICT Index'],
-    "Discipline & Errors": ['Yellow Cards', 'Red Cards', 'Penalties Saved', 'Penalties Missed', 'Own Goals']
+    "Value & Basics": ['Cost (M)', 'Total Points', 'Minutes Played', 'Starts'],
+    "Expected Metrics": ['xG', 'xA', 'xGI', 'NPxG', 'xGC'],
+    "Per-90 Metrics": ['xG90', 'xA90', 'xGI90', 'NPxG90', 'xGC90'],
+    "Actual Output": ['Goals', 'Assists', 'Clean Sheets', 'GC', 'Saves', 'Penalties Saved'],
+    "BPS & ICT Index": ['Bonus', 'BPS', 'Influence', 'Creativity', 'Threat', 'ICT Index']
 }
 
-# Catch any remaining numeric columns into an "Other" category
 all_numeric_cols = filtered_df.select_dtypes(include=['float64', 'int64']).columns.tolist()
-mapped_cols = [col for cols in stat_categories.values() for col in cols]
-other_cols = [col for col in all_numeric_cols if col not in mapped_cols and col not in ['First Name', 'Last Name', 'Web Name', 'Team', 'Position']]
-if other_cols:
-    stat_categories["Other Stats"] = other_cols
 
 # --- Table Settings (Organized Multiselect) ---
 st.sidebar.header("Display Options")
 st.sidebar.markdown("Customize Table Columns:")
 
-selected_columns = ['First Name', 'Last Name', 'Web Name', 'Team', 'Position'] # Core columns locked in
-
+selected_columns = ['First Name', 'Last Name', 'Web Name', 'Team', 'Position'] # Core identifiers locked in
 default_table_cols = ['Cost (M)', 'Total Points', 'Minutes Played', 'xG', 'xA', 'NPxG']
 
 with st.sidebar.expander("⚙️ Select Stats by Category", expanded=False):
