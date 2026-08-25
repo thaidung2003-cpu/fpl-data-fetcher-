@@ -235,7 +235,7 @@ def get_fpl_data():
 
     except Exception as e:
         st.sidebar.error(f"Failed to fetch FPL base data. Error: {e}")
-        return pd.DataFrame()
+        return None
 
     # 2. Read Local JSON File directly from repository
     try:
@@ -269,10 +269,17 @@ def get_fpl_data():
     except Exception as e:
         st.sidebar.warning(f"Could not load league-players.json. Error: {e}")
 
-    return df 
+    return df
+
+df = get_fpl_data()
+
 # --- Main App Interface ---
 st.title("FPL Advanced Player Explorer")
 
+# Safe handling if data failed to load or returned None
+if not isinstance(df, pd.DataFrame) or df.empty:
+    st.warning("Data failed to load. Please check the error messages in the sidebar.")
+    st.stop()
 
 # --- Sidebar Filters ---
 st.sidebar.header("Filter Players")
@@ -325,7 +332,6 @@ core_cols = ['First Name', 'Last Name', 'Web Name', 'Team', 'Position', 'Cost (M
 other_cols = sorted([c for c in filtered_df.columns if c not in core_cols])
 logical_columns = [c for c in core_cols if c in filtered_df.columns] + other_cols
 
-# Dynamically pick up the custom NPxG columns to show in the table automatically
 x_cols_pulled = [c for c in other_cols if c.lower().startswith('x') or 'npxg' in c.lower()]
 default_cols = [c for c in ['Web Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'Minutes Played'] if c in logical_columns] + x_cols_pulled
 selected_columns = st.sidebar.multiselect("Select Table Columns", logical_columns, default=default_cols)
@@ -346,7 +352,6 @@ if show_graph:
         st.sidebar.subheader("Select Graph Axes")
         
         default_x = 'Cost (M)' if 'Cost (M)' in all_numeric_cols else all_numeric_cols[0]
-        # Automatically make the Y-Axis NPxG if successfully parsed
         default_y = 'NPxG' if 'NPxG' in all_numeric_cols else ('Total Points' if 'Total Points' in all_numeric_cols else all_numeric_cols[-1])
         
         x_axis = st.sidebar.selectbox("X-Axis", all_numeric_cols, index=all_numeric_cols.index(default_x), key="x_axis_select")
