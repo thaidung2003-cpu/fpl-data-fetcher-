@@ -311,7 +311,7 @@ def fetch_fpl_data():
         # Clean up the temporary helper columns
         df.drop(columns=['matched_full_name', 'Full Name'], inplace=True)
         
-except Exception as e:
+    except Exception as e:
         # This will pop up a red error box in your app showing exactly what went wrong
         st.sidebar.error(f"FBref Scrape Error: {e}")
         
