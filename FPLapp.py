@@ -5,6 +5,15 @@ import requests
 import json
 import difflib
 
+# --- R Integration for Panna ---
+import rpy2.robjects as robjects
+from rpy2.robjects import pandas2ri
+import rpy2.robjects.packages as rpackages
+from rpy2.robjects.vectors import StrVector
+
+# Enable automatic conversion between R dataframes and Pandas
+pandas2ri.activate()
+
 st.set_page_config(layout="wide", page_title="FPL Advanced Analytics")
 
 # --- Custom D3 Visualization Component ---
@@ -188,6 +197,26 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
     st.components.v1.html(d3_code, height=height, scrolling=True)
 
 # --- Data Fetching and Processing ---
+
+@st.cache_resource
+def setup_r_environment():
+    """Installs and loads the panna R package natively inside Python via rpy2."""
+    utils = rpackages.importr('utils')
+    utils.chooseCRANmirror(ind=1)
+    
+    # Install devtools if missing
+    if not rpackages.isinstalled('devtools'):
+        utils.install_packages(StrVector(('devtools',)))
+        
+    devtools = rpackages.importr('devtools')
+    
+    # Install panna directly from GitHub
+    if not rpackages.isinstalled('panna'):
+        devtools.install_github("peteowen1/panna")
+        
+    # Import and return the panna package object
+    return rpackages.importr('panna')
+
 @st.cache_data(ttl=3600)
 def fetch_fpl_data():
     # 1. Fetch Official FPL Data Online
@@ -226,18 +255,22 @@ def fetch_fpl_data():
     if 'Minutes Played' in df.columns:
         df['Minutes Played'] = pd.to_numeric(df['Minutes Played'], errors='coerce').fillna(0)
 
-    # 2. Hardcoded Direct Fetch from the panna GitHub repository 
+    # 2. Native R Package Integration
     try:
-        # Bypasses API rate limits and HTML structure entirely
-        stats_url = "https://github.com/peteowen1/panna/releases/download/opta-latest/player_stats.parquet"
-        xmetrics_url = "https://github.com/peteowen1/panna/releases/download/opta-latest/xmetrics.parquet"
+        # Load the R package (will install automatically on first boot)
+        panna = setup_r_environment()
         
-        # Pandas handles the web request and redirect directly
-        opta_df = pd.read_parquet(stats_url)
+        # Download / sync data exactly as the R documentation specifies
+        panna.pb_download_opta()
         
-        # Try to pull in xmetrics too, safely failing if it's not present
+        # Load Opta stats using the native R function
+        r_stats = panna.load_opta_stats("EPL", "2024-2025")
+        opta_df = robjects.conversion.rpy2py(r_stats)
+        
+        # Try to load xmetrics to ensure expected metrics are present
         try:
-            xmetrics_df = pd.read_parquet(xmetrics_url)
+            r_xmetrics = panna.load_opta_xmetrics("EPL", "2024-2025")
+            xmetrics_df = robjects.conversion.rpy2py(r_xmetrics)
             common_cols = list(set(opta_df.columns) & set(xmetrics_df.columns))
             merge_key = 'player_name' if 'player_name' in common_cols else ('player' if 'player' in common_cols else None)
             if merge_key:
@@ -246,19 +279,10 @@ def fetch_fpl_data():
         except Exception:
             pass
 
-        # Filter for EPL 2024-2025
-        if 'competition' in opta_df.columns:
-            opta_df = opta_df[opta_df['competition'] == 'EPL']
-        elif 'league' in opta_df.columns:
-            opta_df = opta_df[opta_df['league'] == 'EPL']
-            
-        if 'season' in opta_df.columns:
-            opta_df = opta_df[opta_df['season'] == '2024-2025']
-            
+        # Format and aggregate the natively fetched data
         player_col = 'player_name' if 'player_name' in opta_df.columns else 'player'
         mins_col = 'minutes' if 'minutes' in opta_df.columns else 'mins'
         
-        # --- DYNAMIC X-STATS EXTRACTION ---
         x_stat_cols = [col for col in opta_df.columns if str(col).lower().startswith('x') or 'npxg' in str(col).lower()]
         
         cols_to_keep = [player_col, mins_col] + x_stat_cols
@@ -300,20 +324,20 @@ def fetch_fpl_data():
         df.drop(columns=['matched_full_name', 'Full Name'], inplace=True)
         
     except Exception as e:
-        st.sidebar.error(f"Failed to fetch remote Opta data. Error: {e}")
+        st.sidebar.error(f"Failed to load Opta data via R package. Error: {e}")
 
     return df
 
 df = fetch_fpl_data()
 
 # --- Main App Interface ---
-st.title("FPL Advanced Player Explorer (Opta X-Stats Powered)")
+st.title("FPL Advanced Player Explorer (Native panna Powered)")
 
 # --- Sidebar Filters ---
 st.sidebar.header("Filter Players")
 search_name = st.sidebar.text_input("Look up by Web Name (separate by commas)")
 
-# Safe unique sorts to prevent "TypeError: '<' not supported between instances of 'float' and 'str'"
+# Safe sorting logic included so the UI never crashes if data is missing
 safe_teams = sorted([str(x) for x in df['Team'].dropna().unique()]) if 'Team' in df.columns else []
 selected_teams = st.sidebar.multiselect("Categorize by Team", safe_teams)
 
@@ -361,7 +385,6 @@ core_cols = ['First Name', 'Last Name', 'Web Name', 'Team', 'Position', 'Cost (M
 other_cols = sorted([c for c in filtered_df.columns if c not in core_cols])
 logical_columns = [c for c in core_cols if c in filtered_df.columns] + other_cols
 
-# Create dynamic default table columns depending on what x-stats were successfully pulled
 x_cols_pulled = [c for c in other_cols if c.lower().startswith('x') or 'npxg' in c.lower()]
 default_cols = [c for c in ['Web Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'Minutes Played'] if c in logical_columns] + x_cols_pulled[:3] 
 selected_columns = st.sidebar.multiselect("Select Table Columns", logical_columns, default=default_cols)
