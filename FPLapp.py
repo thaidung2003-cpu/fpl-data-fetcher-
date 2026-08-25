@@ -223,7 +223,7 @@ def get_fpl_data():
             if df[col].dtype == 'object' and col not in ['first_name', 'second_name', 'web_name', 'short_name', 'singular_name_short', 'photo', 'status', 'news']:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        # Drop truly useless metadata columns so they don't clutter the app
+        # Drop truly useless metadata columns
         useless_cols = ['id', 'team', 'element_type', 'team_code', 'chance_of_playing_next_round', 'chance_of_playing_this_round', 'photo', 'status', 'news', 'news_added', 'squad_number', 'ep_this', 'ep_next', 'in_dreamteam']
         df.drop(columns=[c for c in useless_cols if c in df.columns], inplace=True)
         
@@ -370,19 +370,41 @@ if not filtered_df.empty and 'Cost (M)' in filtered_df.columns:
 if not filtered_df.empty and 'Minutes Played' in filtered_df.columns:
     filtered_df = filtered_df[filtered_df['Minutes Played'] >= min_minutes]
 
-# --- Sidebar Display Options ---
+# --- Dynamic Stat Categorization ---
+stat_categories = {
+    "Value & Basics": ['Cost (M)', 'Total Points', 'Minutes Played', 'Selected By (%)', 'Form', 'PPG', 'Starts'],
+    "Expected Metrics": ['xG', 'xA', 'xGI', 'NPxG', 'xGC', 'xG90', 'xA90', 'xGI90', 'NPxG90', 'xGC90'],
+    "Actual Output": ['Goals', 'Assists', 'Clean Sheets', 'GC', 'Saves'],
+    "BPS & ICT Index": ['Bonus', 'BPS', 'Influence', 'Creativity', 'Threat', 'ICT Index'],
+    "Discipline & Errors": ['Yellow Cards', 'Red Cards', 'Penalties Saved', 'Penalties Missed', 'Own Goals']
+}
+
+# Catch any remaining numeric columns into an "Other" category
+all_numeric_cols = filtered_df.select_dtypes(include=['float64', 'int64']).columns.tolist()
+mapped_cols = [col for cols in stat_categories.values() for col in cols]
+other_cols = [col for col in all_numeric_cols if col not in mapped_cols and col not in ['First Name', 'Last Name', 'Web Name', 'Team', 'Position']]
+if other_cols:
+    stat_categories["Other Stats"] = other_cols
+
+# --- Table Settings (Organized Multiselect) ---
 st.sidebar.header("Display Options")
+st.sidebar.markdown("Customize Table Columns:")
 
-core_cols = ['First Name', 'Last Name', 'Web Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'Minutes Played']
-other_cols = sorted([c for c in filtered_df.columns if c not in core_cols])
-logical_columns = [c for c in core_cols if c in filtered_df.columns] + other_cols
+selected_columns = ['First Name', 'Last Name', 'Web Name', 'Team', 'Position'] # Core columns locked in
 
-x_cols_pulled = [c for c in other_cols if c in ['xG', 'xA', 'xGI', 'xG90', 'xA90', 'xGI90', 'NPxG', 'NPxG90'] or c.lower().startswith('x')]
-default_cols = [c for c in ['Web Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'Minutes Played'] if c in logical_columns] + x_cols_pulled[:3]
-selected_columns = st.sidebar.multiselect("Select Table Columns", logical_columns, default=default_cols)
+default_table_cols = ['Cost (M)', 'Total Points', 'Minutes Played', 'xG', 'xA', 'NPxG']
+
+with st.sidebar.expander("⚙️ Select Stats by Category", expanded=False):
+    for cat_name, cat_cols in stat_categories.items():
+        valid_cols = [c for c in cat_cols if c in filtered_df.columns]
+        if valid_cols:
+            defaults = [c for c in default_table_cols if c in valid_cols]
+            selected = st.multiselect(f"**{cat_name}**", valid_cols, default=defaults, key=f"tbl_{cat_name}")
+            selected_columns.extend(selected)
+
 display_df = filtered_df[selected_columns]
 
-# --- Graph Options & Axis Selection ---
+# --- Graph Options & Two-Step Axis Selection ---
 st.sidebar.header("Graph Options")
 show_graph = st.sidebar.toggle("Show Data Graph", value=True, key="show_data_graph_toggle")
 show_labels = st.sidebar.toggle("Show Player Labels on Graph", value=True, key="show_labels_toggle")
@@ -390,20 +412,25 @@ show_labels = st.sidebar.toggle("Show Player Labels on Graph", value=True, key="
 graph_width = st.sidebar.slider("Chart Width (px)", min_value=800, max_value=4000, value=1300, step=100)
 graph_height = st.sidebar.slider("Chart Height (px)", min_value=500, max_value=3000, value=750, step=50)
 
-if show_graph:
-    all_numeric_cols = sorted(filtered_df.select_dtypes(include=['float64', 'int64']).columns.tolist())
+if show_graph and all_numeric_cols:
+    st.sidebar.subheader("Select Graph Axes")
+    category_list = list(stat_categories.keys())
     
-    if all_numeric_cols:
-        st.sidebar.subheader("Select Graph Axes")
-        
-        default_x = 'Cost (M)' if 'Cost (M)' in all_numeric_cols else all_numeric_cols[0]
-        default_y = 'xG' if 'xG' in all_numeric_cols else ('Total Points' if 'Total Points' in all_numeric_cols else all_numeric_cols[-1])
-        
-        x_axis = st.sidebar.selectbox("X-Axis", all_numeric_cols, index=all_numeric_cols.index(default_x), key="x_axis_select")
-        x_order = st.sidebar.radio("X-Axis Order", ["Ascending", "Descending"], horizontal=True, key="x_axis_order")
-        
-        y_axis = st.sidebar.selectbox("Y-Axis", all_numeric_cols, index=all_numeric_cols.index(default_y), key="y_axis_select")
-        y_order = st.sidebar.radio("Y-Axis Order", ["Ascending", "Descending"], horizontal=True, key="y_axis_order")
+    # X-Axis Settings
+    st.sidebar.markdown("**X-Axis**")
+    x_cat = st.sidebar.selectbox("Category", category_list, index=0, key="x_cat_select", label_visibility="collapsed")
+    x_axis = st.sidebar.selectbox("Metric", [c for c in stat_categories[x_cat] if c in filtered_df.columns], index=0, key="x_metric_select")
+    x_order = st.sidebar.radio("X-Axis Order", ["Ascending", "Descending"], horizontal=True, key="x_axis_order")
+    
+    # Y-Axis Settings
+    st.sidebar.markdown("**Y-Axis**")
+    y_default_cat_idx = category_list.index("Expected Metrics") if "Expected Metrics" in category_list else 0
+    y_cat = st.sidebar.selectbox("Category", category_list, index=y_default_cat_idx, key="y_cat_select", label_visibility="collapsed")
+    
+    valid_y_metrics = [c for c in stat_categories[y_cat] if c in filtered_df.columns]
+    y_default_metric_idx = valid_y_metrics.index("xG") if "xG" in valid_y_metrics else 0
+    y_axis = st.sidebar.selectbox("Metric", valid_y_metrics, index=y_default_metric_idx, key="y_metric_select")
+    y_order = st.sidebar.radio("Y-Axis Order", ["Ascending", "Descending"], horizontal=True, key="y_axis_order")
 
 # --- Data Table Rendering ---
 st.write(f"Showing **{len(display_df)}** players after primary filters.")
