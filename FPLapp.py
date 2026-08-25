@@ -232,15 +232,28 @@ def get_fpl_data():
             'cost_change_start_fall', 'cost_change_event_fall', 'yellow_cards', 'red_cards', 'penalties_missed', 'own_goals'
         ]
         df.drop(columns=[c for c in useless_cols if c in df.columns], inplace=True)
+
+        base_cols = [
+            'first_name', 'second_name', 'web_name', 'short_name', 'singular_name_short', 'now_cost', 
+            'total_points', 'goals_scored', 'assists', 'clean_sheets', 'goals_conceded',
+            'minutes', 'starts', 'expected_goals', 'expected_assists', 
+            'expected_goal_involvements', 'expected_goals_conceded', 'bonus', 'bps', 
+            'saves', 'penalties_saved', 'influence', 'creativity', 'threat', 'ict_index',
+            'defensive_contribution', 'defensive_contribution_per_90'
+        ]
+
+        df = df[[c for c in base_cols if c in df.columns]]
         
         # Rename essential performance columns
         rename_dict = {
             'first_name': 'First Name', 'second_name': 'Last Name', 'web_name': 'Web Name', 'short_name': 'Team', 'singular_name_short': 'Position', 
-            'now_cost': 'Cost (M)', 'total_points': 'Total Points', 'goals_scored': 'Goals', 'clean_sheets': 'Clean Sheets', 'goals_conceded': 'GC',
+            'now_cost': 'Cost (M)', 'total_points': 'Total Points', 'goals_scored': 'Goals', 'assists': 'Assists', 'clean_sheets': 'Clean Sheets', 'goals_conceded': 'GC',
             'minutes': 'Minutes Played', 'starts': 'Starts', 'expected_goals': 'xG', 'expected_assists': 'xA', 
             'expected_goal_involvements': 'xGI', 'expected_goals_conceded': 'xGC', 'bonus': 'Bonus', 'bps': 'BPS', 
             'saves': 'Saves', 'penalties_saved': 'Penalties Saved', 'influence': 'Influence', 'creativity': 'Creativity', 
-            'threat': 'Threat', 'ict_index': 'ICT Index'
+            'threat': 'Threat', 'ict_index': 'ICT Index',
+            'defensive_contribution': 'Defensive Contribution',
+            'defensive_contribution_per_90': 'Defensive Contribution 90'
         }
         df.rename(columns=rename_dict, inplace=True)
         
@@ -249,7 +262,7 @@ def get_fpl_data():
         if 'Minutes Played' in df.columns:
             df['Minutes Played'] = pd.to_numeric(df['Minutes Played'], errors='coerce').fillna(0)
             
-        # Calculate Per-90 metrics
+        # Calculate Per-90 metrics natively if needed
         for col in ['xG', 'xA', 'xGI', 'xGC']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
@@ -368,8 +381,8 @@ if not filtered_df.empty and 'Minutes Played' in filtered_df.columns:
 stat_categories = {
     "Value & Basics": ['Cost (M)', 'Total Points', 'Minutes Played', 'Starts'],
     "Expected Metrics": ['xG', 'xA', 'xGI', 'NPxG', 'xGC'],
-    "Per-90 Metrics": ['xG90', 'xA90', 'xGI90', 'NPxG90', 'xGC90'],
-    "Actual Output": ['Goals', 'Assists', 'Clean Sheets', 'GC', 'Saves', 'Penalties Saved'],
+    "Per-90 Metrics": ['xG90', 'xA90', 'xGI90', 'NPxG90', 'xGC90', 'Defensive Contribution 90'],
+    "Actual Output": ['Goals', 'Assists', 'Clean Sheets', 'GC', 'Saves', 'Penalties Saved', 'Defensive Contribution'],
     "BPS & ICT Index": ['Bonus', 'BPS', 'Influence', 'Creativity', 'Threat', 'ICT Index']
 }
 
