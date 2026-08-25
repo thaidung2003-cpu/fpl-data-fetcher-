@@ -4,8 +4,6 @@ import numpy as np
 import requests
 import json
 import difflib
-import io
-import re
 
 st.set_page_config(layout="wide", page_title="FPL Advanced Analytics")
 
@@ -228,35 +226,25 @@ def fetch_fpl_data():
     if 'Minutes Played' in df.columns:
         df['Minutes Played'] = pd.to_numeric(df['Minutes Played'], errors='coerce').fillna(0)
 
-    # 2. Fetch Opta Data Directly from the CORRECT GitHub Repo
+    # 2. Hardcoded Direct Fetch from the panna GitHub repository 
     try:
-        # Pointing to 'peteowen1/panna' instead of 'pannadata'
-        api_url = "https://api.github.com/repos/peteowen1/panna/releases/tags/opta-latest"
-        release_data = requests.get(api_url).json()
+        # Bypasses API rate limits and HTML structure entirely
+        stats_url = "https://github.com/peteowen1/panna/releases/download/opta-latest/player_stats.parquet"
+        xmetrics_url = "https://github.com/peteowen1/panna/releases/download/opta-latest/xmetrics.parquet"
         
-        # Extract the download URLs specifically for player stats and xmetrics
-        assets = release_data.get("assets", [])
-        stats_url = next((a["browser_download_url"] for a in assets if "player_stats" in a["name"]), None)
-        xmetrics_url = next((a["browser_download_url"] for a in assets if "xmetrics" in a["name"]), None)
+        # Pandas handles the web request and redirect directly
+        opta_df = pd.read_parquet(stats_url)
         
-        if not stats_url:
-            # If it still fails, this will print exactly what files ARE available to the Streamlit screen
-            available_files = [a["name"] for a in assets]
-            raise ValueError(f"Could not find 'player_stats'. Available files: {available_files}")
-            
-        # Download and read player_stats
-        stats_resp = requests.get(stats_url)
-        opta_df = pd.read_parquet(io.BytesIO(stats_resp.content))
-        
-        # Download and merge xmetrics to guarantee all x-stats are included
-        if xmetrics_url:
-            x_resp = requests.get(xmetrics_url)
-            xmetrics_df = pd.read_parquet(io.BytesIO(x_resp.content))
+        # Try to pull in xmetrics too, safely failing if it's not present
+        try:
+            xmetrics_df = pd.read_parquet(xmetrics_url)
             common_cols = list(set(opta_df.columns) & set(xmetrics_df.columns))
             merge_key = 'player_name' if 'player_name' in common_cols else ('player' if 'player' in common_cols else None)
             if merge_key:
                 opta_df = opta_df.merge(xmetrics_df, on=merge_key, how='left', suffixes=('', '_drop'))
                 opta_df = opta_df.loc[:, ~opta_df.columns.str.endswith('_drop')]
+        except Exception:
+            pass
 
         # Filter for EPL 2024-2025
         if 'competition' in opta_df.columns:
@@ -265,7 +253,7 @@ def fetch_fpl_data():
             opta_df = opta_df[opta_df['league'] == 'EPL']
             
         if 'season' in opta_df.columns:
-            opta_df = opta_df[opta_df['season'] == '2026-2027']
+            opta_df = opta_df[opta_df['season'] == '2024-2025']
             
         player_col = 'player_name' if 'player_name' in opta_df.columns else 'player'
         mins_col = 'minutes' if 'minutes' in opta_df.columns else 'mins'
@@ -277,16 +265,14 @@ def fetch_fpl_data():
         opta_df = opta_df[[c for c in cols_to_keep if c in opta_df.columns]].dropna(subset=[player_col])
         opta_df[mins_col] = pd.to_numeric(opta_df[mins_col], errors='coerce').fillna(0)
         
-        # Aggregate the data in case it is split match-by-match
         opta_df = opta_df.groupby(player_col, as_index=False).sum(numeric_only=True)
         
-        # Calculate Per-90 standard metrics for every single extracted x-stat
         for x_col in x_stat_cols:
             opta_df[x_col] = pd.to_numeric(opta_df[x_col], errors='coerce').fillna(0.0)
             per90_name = f"{x_col}90"
             opta_df[per90_name] = np.where(opta_df[mins_col] > 0, (opta_df[x_col] / opta_df[mins_col]) * 90, 0).round(2)
         
-        df['Full Name'] = df['First Name'] + ' ' + df['Last Name']
+        df['Full Name'] = df['First Name'].astype(str) + ' ' + df['Last Name'].astype(str)
         web_to_full_map = df.set_index('Web Name')['Full Name'].to_dict()
         fpl_full_names = df['Full Name'].tolist()
         fpl_web_names = df['Web Name'].tolist()
@@ -317,16 +303,22 @@ def fetch_fpl_data():
         st.sidebar.error(f"Failed to fetch remote Opta data. Error: {e}")
 
     return df
+
+df = fetch_fpl_data()
+
 # --- Main App Interface ---
 st.title("FPL Advanced Player Explorer (Opta X-Stats Powered)")
 
 # --- Sidebar Filters ---
 st.sidebar.header("Filter Players")
 search_name = st.sidebar.text_input("Look up by Web Name (separate by commas)")
-selected_teams = st.sidebar.multiselect("Categorize by Team", sorted(df['Team'].unique()))
 
-all_positions = df['Position'].unique().tolist() if not df.empty else []
-selected_positions = st.sidebar.multiselect("Categorize by Position", all_positions, default=all_positions)
+# Safe unique sorts to prevent "TypeError: '<' not supported between instances of 'float' and 'str'"
+safe_teams = sorted([str(x) for x in df['Team'].dropna().unique()]) if 'Team' in df.columns else []
+selected_teams = st.sidebar.multiselect("Categorize by Team", safe_teams)
+
+safe_positions = sorted([str(x) for x in df['Position'].dropna().unique()]) if 'Position' in df.columns else []
+selected_positions = st.sidebar.multiselect("Categorize by Position", safe_positions, default=safe_positions)
 
 max_mins_played = int(df['Minutes Played'].max()) if not df.empty and df['Minutes Played'].max() > 0 else 90
 min_minutes = st.sidebar.number_input(
@@ -339,8 +331,9 @@ min_minutes = st.sidebar.number_input(
 
 min_cost, max_cost = st.sidebar.slider(
     "Cost (M)", 
-    float(df['Cost (M)'].min()), float(df['Cost (M)'].max()), 
-    (float(df['Cost (M)'].min()), float(df['Cost (M)'].max())), 
+    float(df['Cost (M)'].min()) if not df.empty else 0.0, 
+    float(df['Cost (M)'].max()) if not df.empty else 15.0, 
+    (float(df['Cost (M)'].min()) if not df.empty else 0.0, float(df['Cost (M)'].max()) if not df.empty else 15.0), 
     step=0.1
 )
 
@@ -356,20 +349,22 @@ if selected_teams:
 if selected_positions:
     filtered_df = filtered_df[filtered_df['Position'].isin(selected_positions)]
 
-filtered_df = filtered_df[(filtered_df['Cost (M)'] >= min_cost) & (filtered_df['Cost (M)'] <= max_cost)]
-filtered_df = filtered_df[filtered_df['Minutes Played'] >= min_minutes]
+if not filtered_df.empty and 'Cost (M)' in filtered_df.columns:
+    filtered_df = filtered_df[(filtered_df['Cost (M)'] >= min_cost) & (filtered_df['Cost (M)'] <= max_cost)]
+if not filtered_df.empty and 'Minutes Played' in filtered_df.columns:
+    filtered_df = filtered_df[filtered_df['Minutes Played'] >= min_minutes]
 
 # --- Sidebar Display Options ---
 st.sidebar.header("Display Options")
 
 core_cols = ['First Name', 'Last Name', 'Web Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'Minutes Played']
 other_cols = sorted([c for c in filtered_df.columns if c not in core_cols])
-logical_columns = core_cols + other_cols
+logical_columns = [c for c in core_cols if c in filtered_df.columns] + other_cols
 
 # Create dynamic default table columns depending on what x-stats were successfully pulled
 x_cols_pulled = [c for c in other_cols if c.lower().startswith('x') or 'npxg' in c.lower()]
-default_cols = ['Web Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'Minutes Played'] + x_cols_pulled[:3] 
-selected_columns = st.sidebar.multiselect("Select Table Columns", logical_columns, default=[c for c in default_cols if c in logical_columns])
+default_cols = [c for c in ['Web Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'Minutes Played'] if c in logical_columns] + x_cols_pulled[:3] 
+selected_columns = st.sidebar.multiselect("Select Table Columns", logical_columns, default=default_cols)
 display_df = filtered_df[selected_columns]
 
 # --- Graph Options & Axis Selection ---
@@ -383,20 +378,20 @@ graph_height = st.sidebar.slider("Chart Height (px)", min_value=500, max_value=3
 if show_graph:
     all_numeric_cols = sorted(filtered_df.select_dtypes(include=['float64', 'int64']).columns.tolist())
     
-    st.sidebar.subheader("Select Graph Axes")
-    
-    x_axis = st.sidebar.selectbox("X-Axis", all_numeric_cols, index=all_numeric_cols.index(x_cols_pulled[0]) if len(x_cols_pulled) > 0 else 0, key="x_axis_select")
-    x_order = st.sidebar.radio("X-Axis Order", ["Ascending", "Descending"], horizontal=True, key="x_axis_order")
-    
-    y_axis = st.sidebar.selectbox("Y-Axis", all_numeric_cols, index=all_numeric_cols.index(x_cols_pulled[1]) if len(x_cols_pulled) > 1 else 1, key="y_axis_select")
-    y_order = st.sidebar.radio("Y-Axis Order", ["Ascending", "Descending"], horizontal=True, key="y_axis_order")
+    if all_numeric_cols:
+        st.sidebar.subheader("Select Graph Axes")
+        x_axis = st.sidebar.selectbox("X-Axis", all_numeric_cols, index=all_numeric_cols.index(x_cols_pulled[0]) if len(x_cols_pulled) > 0 else 0, key="x_axis_select")
+        x_order = st.sidebar.radio("X-Axis Order", ["Ascending", "Descending"], horizontal=True, key="x_axis_order")
+        
+        y_axis = st.sidebar.selectbox("Y-Axis", all_numeric_cols, index=all_numeric_cols.index(x_cols_pulled[1]) if len(x_cols_pulled) > 1 else (1 if len(all_numeric_cols) > 1 else 0), key="y_axis_select")
+        y_order = st.sidebar.radio("Y-Axis Order", ["Ascending", "Descending"], horizontal=True, key="y_axis_order")
 
 # --- Data Table Rendering ---
 st.write(f"Showing **{len(display_df)}** players after primary filters.")
 st.dataframe(display_df.style.format(precision=2), use_container_width=True, hide_index=True)
 
 # --- Graph Rendering ---
-if show_graph:
+if show_graph and all_numeric_cols:
     st.divider()
     st.header("Graph Data")
     
