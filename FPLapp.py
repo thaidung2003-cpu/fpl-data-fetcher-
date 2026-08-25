@@ -189,7 +189,7 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
 
 # --- Data Fetching and Processing ---
 @st.cache_data(ttl=3600)
-def fetch_fpl_data():
+def get_fpl_data():
     # 1. Fetch Official FPL Data Online
     try:
         url = "https://fantasy.premierleague.com/api/bootstrap-static/"
@@ -269,7 +269,7 @@ def fetch_fpl_data():
     except Exception as e:
         st.sidebar.warning(f"Could not load league-players.json. Error: {e}")
 
-    return df
+    return df = get_fpl_data()
 # --- Main App Interface ---
 st.title("FPL Advanced Player Explorer")
 
