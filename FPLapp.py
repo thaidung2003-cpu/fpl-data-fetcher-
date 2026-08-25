@@ -273,10 +273,6 @@ def get_fpl_data():
 # --- Main App Interface ---
 st.title("FPL Advanced Player Explorer")
 
-# Safe handling if data failed to load or returned None
-if not isinstance(df, pd.DataFrame) or df.empty:
-    st.warning("Data failed to load. Please check the error messages in the sidebar.")
-    st.stop()
 
 # --- Sidebar Filters ---
 st.sidebar.header("Filter Players")
