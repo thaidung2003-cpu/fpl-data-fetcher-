@@ -228,52 +228,35 @@ def fetch_fpl_data():
     if 'Minutes Played' in df.columns:
         df['Minutes Played'] = pd.to_numeric(df['Minutes Played'], errors='coerce').fillna(0)
 
-    # 2. Scrape Opta Data Links Directly (Bypasses GitHub API Rate Limits)
+    # 2. Fetch Opta Data Directly from the CORRECT GitHub Repo
     try:
-        # We spoof a standard browser User-Agent so GitHub accepts the request
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        release_html_url = "https://github.com/peteowen1/pannadata/releases/tag/opta-latest"
+        # Pointing to 'peteowen1/panna' instead of 'pannadata'
+        api_url = "https://api.github.com/repos/peteowen1/panna/releases/tags/opta-latest"
+        release_data = requests.get(api_url).json()
         
-        html_resp = requests.get(release_html_url, headers=headers)
-        html_resp.raise_for_status()
+        # Extract the download URLs specifically for player stats and xmetrics
+        assets = release_data.get("assets", [])
+        stats_url = next((a["browser_download_url"] for a in assets if "player_stats" in a["name"]), None)
+        xmetrics_url = next((a["browser_download_url"] for a in assets if "xmetrics" in a["name"]), None)
         
-        # Scrape the page for all parquet asset download links
-        parquet_links = list(set(re.findall(r'href="([^"]+\.parquet)"', html_resp.text)))
-        
-        if not parquet_links:
-            raise ValueError(f"No .parquet files found on the releases page. HTML Status: {html_resp.status_code}")
-            
-        base_url = "https://github.com"
-        stats_url = None
-        xmetrics_url = None
-        
-        # Search the scraped links for player_stats and xmetrics
-        for link in parquet_links:
-            full_url = link if link.startswith("http") else base_url + link
-            if "player_stats" in link:
-                stats_url = full_url
-            elif "xmetrics" in link:
-                xmetrics_url = full_url
-                
         if not stats_url:
-            # This dynamically prints exactly what files *are* available if it somehow misses again
-            raise ValueError(f"Could not find 'player_stats' in the assets. Found these instead: {parquet_links}")
+            # If it still fails, this will print exactly what files ARE available to the Streamlit screen
+            available_files = [a["name"] for a in assets]
+            raise ValueError(f"Could not find 'player_stats'. Available files: {available_files}")
             
-        # Download and read player_stats via direct link
-        stats_resp = requests.get(stats_url, headers=headers, allow_redirects=True)
-        stats_resp.raise_for_status()
+        # Download and read player_stats
+        stats_resp = requests.get(stats_url)
         opta_df = pd.read_parquet(io.BytesIO(stats_resp.content))
         
         # Download and merge xmetrics to guarantee all x-stats are included
         if xmetrics_url:
-            x_resp = requests.get(xmetrics_url, headers=headers, allow_redirects=True)
-            if x_resp.status_code == 200:
-                xmetrics_df = pd.read_parquet(io.BytesIO(x_resp.content))
-                common_cols = list(set(opta_df.columns) & set(xmetrics_df.columns))
-                merge_key = 'player_name' if 'player_name' in common_cols else ('player' if 'player' in common_cols else None)
-                if merge_key:
-                    opta_df = opta_df.merge(xmetrics_df, on=merge_key, how='left', suffixes=('', '_drop'))
-                    opta_df = opta_df.loc[:, ~opta_df.columns.str.endswith('_drop')]
+            x_resp = requests.get(xmetrics_url)
+            xmetrics_df = pd.read_parquet(io.BytesIO(x_resp.content))
+            common_cols = list(set(opta_df.columns) & set(xmetrics_df.columns))
+            merge_key = 'player_name' if 'player_name' in common_cols else ('player' if 'player' in common_cols else None)
+            if merge_key:
+                opta_df = opta_df.merge(xmetrics_df, on=merge_key, how='left', suffixes=('', '_drop'))
+                opta_df = opta_df.loc[:, ~opta_df.columns.str.endswith('_drop')]
 
         # Filter for EPL 2024-2025
         if 'competition' in opta_df.columns:
@@ -334,9 +317,6 @@ def fetch_fpl_data():
         st.sidebar.error(f"Failed to fetch remote Opta data. Error: {e}")
 
     return df
-
-df = fetch_fpl_data()
-
 # --- Main App Interface ---
 st.title("FPL Advanced Player Explorer (Opta X-Stats Powered)")
 
