@@ -4,6 +4,7 @@ import numpy as np
 import requests
 import json
 import difflib
+import io
 
 st.set_page_config(layout="wide", page_title="FPL Advanced Analytics")
 
@@ -226,35 +227,55 @@ def fetch_fpl_data():
     if 'Minutes Played' in df.columns:
         df['Minutes Played'] = pd.to_numeric(df['Minutes Played'], errors='coerce').fillna(0)
 
-    # 2. Fetch Opta Data Directly from GitHub Releases
+    # 2. Replicate R's 'panna' package logic in Python using the GitHub API
     try:
-        # Target the GitHub Release tagged 'opta-latest'.
-        # Try 'player_stats.parquet' as per the documentation image. 
-        # (If x-stats are kept separate, you may need to change this to 'xmetrics.parquet')
-        OPTA_DATA_URL = "https://github.com/peteowen1/pannadata/releases/download/opta-latest/player_stats.parquet"
+        # Pinging the exact same release tag as the R package to find the file URLs dynamically
+        api_url = "https://api.github.com/repos/peteowen1/pannadata/releases/tags/opta-latest"
+        release_data = requests.get(api_url).json()
         
-        # Pandas dynamically downloads and parses the Parquet file over the internet
-        opta_df = pd.read_parquet(OPTA_DATA_URL)
+        # Extract the download URLs specifically for player stats and xmetrics
+        assets = release_data.get("assets", [])
+        stats_url = next((a["browser_download_url"] for a in assets if "player_stats" in a["name"]), None)
+        xmetrics_url = next((a["browser_download_url"] for a in assets if "xmetrics" in a["name"]), None)
         
-        # Filter for EPL if the parquet contains multiple leagues
+        if not stats_url:
+            raise ValueError("Could not find player_stats in the release assets.")
+            
+        # Download and read player_stats
+        stats_resp = requests.get(stats_url)
+        opta_df = pd.read_parquet(io.BytesIO(stats_resp.content))
+        
+        # Download and merge xmetrics to guarantee all x-stats are included
+        if xmetrics_url:
+            x_resp = requests.get(xmetrics_url)
+            xmetrics_df = pd.read_parquet(io.BytesIO(x_resp.content))
+            common_cols = list(set(opta_df.columns) & set(xmetrics_df.columns))
+            merge_key = 'player_name' if 'player_name' in common_cols else ('player' if 'player' in common_cols else None)
+            if merge_key:
+                opta_df = opta_df.merge(xmetrics_df, on=merge_key, how='left', suffixes=('', '_drop'))
+                opta_df = opta_df.loc[:, ~opta_df.columns.str.endswith('_drop')]
+
+        # Filter for EPL 2024-2025
         if 'competition' in opta_df.columns:
             opta_df = opta_df[opta_df['competition'] == 'EPL']
         elif 'league' in opta_df.columns:
             opta_df = opta_df[opta_df['league'] == 'EPL']
             
-        # Dynamically detect player and minutes columns
+        if 'season' in opta_df.columns:
+            opta_df = opta_df[opta_df['season'] == '2024-2025']
+            
         player_col = 'player_name' if 'player_name' in opta_df.columns else 'player'
         mins_col = 'minutes' if 'minutes' in opta_df.columns else 'mins'
         
         # --- DYNAMIC X-STATS EXTRACTION ---
-        # Automatically detects any column that represents Expected stats (starts with 'x' or contains 'npxg')
         x_stat_cols = [col for col in opta_df.columns if str(col).lower().startswith('x') or 'npxg' in str(col).lower()]
         
-        # Filter dataframe strictly to Player, Minutes, and the extracted X-Stats
         cols_to_keep = [player_col, mins_col] + x_stat_cols
         opta_df = opta_df[[c for c in cols_to_keep if c in opta_df.columns]].dropna(subset=[player_col])
-        
         opta_df[mins_col] = pd.to_numeric(opta_df[mins_col], errors='coerce').fillna(0)
+        
+        # Aggregate the data in case it is split match-by-match
+        opta_df = opta_df.groupby(player_col, as_index=False).sum(numeric_only=True)
         
         # Calculate Per-90 standard metrics for every single extracted x-stat
         for x_col in x_stat_cols:
@@ -262,7 +283,6 @@ def fetch_fpl_data():
             per90_name = f"{x_col}90"
             opta_df[per90_name] = np.where(opta_df[mins_col] > 0, (opta_df[x_col] / opta_df[mins_col]) * 90, 0).round(2)
         
-        # Build Match Maps to perfectly sync Opta names to FPL names
         df['Full Name'] = df['First Name'] + ' ' + df['Last Name']
         web_to_full_map = df.set_index('Web Name')['Full Name'].to_dict()
         fpl_full_names = df['Full Name'].tolist()
@@ -271,7 +291,6 @@ def fetch_fpl_data():
         match_dict = {}
         for opta_name in opta_df[player_col]:
             clean_name = str(opta_name).split('\\')[0].strip()
-            
             full_matches = difflib.get_close_matches(clean_name, fpl_full_names, n=1, cutoff=0.65)
             if full_matches:
                 match_dict[opta_name] = full_matches[0]
@@ -283,19 +302,16 @@ def fetch_fpl_data():
         opta_df['matched_full_name'] = opta_df[player_col].map(match_dict)
         opta_clean = opta_df.dropna(subset=['matched_full_name']).drop_duplicates(subset=['matched_full_name'])
         
-        # Merge all dynamically detected Opta X-Stats back into the FPL dataframe
         merge_cols = ['matched_full_name'] + x_stat_cols + [f"{c}90" for c in x_stat_cols]
         df = df.merge(opta_clean[merge_cols], left_on='Full Name', right_on='matched_full_name', how='left')
         
-        # Clean up NaNs created by merge
         for col in x_stat_cols + [f"{c}90" for c in x_stat_cols]:
             df[col] = df[col].fillna(0.0)
             
         df.drop(columns=['matched_full_name', 'Full Name'], inplace=True)
         
     except Exception as e:
-        # If the remote fetch fails, this alert will pop up in your deployed app letting you know exactly why
-        st.sidebar.warning(f"Failed to fetch remote Opta data from Pannadata Releases. Error: {e}")
+        st.sidebar.warning(f"Failed to fetch remote Opta data from Pannadata Releases via API. Error: {e}")
 
     return df
 
