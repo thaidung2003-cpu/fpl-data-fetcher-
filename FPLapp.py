@@ -234,7 +234,7 @@ def fetch_fpl_data():
         if "GITHUB_TOKEN" in st.secrets:
             headers["Authorization"] = f"token {st.secrets['GITHUB_TOKEN']}"
             
-        api_url = "https://api.github.com/repos/peteowen1/panna/releases/tags/opta-latest"
+        api_url = "https://api.github.com/repos/peteowen1/pannadata/releases/tags/opta-latest"
         
         response = requests.get(api_url, headers=headers)
         if response.status_code != 200:
