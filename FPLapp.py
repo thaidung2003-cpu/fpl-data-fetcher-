@@ -118,7 +118,6 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
     const yMax = d3.max(data, d => d[yName]);
 
     const xDomain = xAsc ? [xMin * 0.95, xMax * 1.05] : [xMax * 1.05, xMin * 0.95];
-    // Respects Y-axis ascending vs descending toggle properly
     const yDomain = yAsc ? [yMin * 0.95, yMax * 1.05] : [yMax * 1.05, yMin * 0.95];
 
     const xScale = d3.scaleLinear().domain(xDomain).range([0, innerWidth]);
@@ -202,6 +201,18 @@ def get_fpl_data():
         fpl_response.raise_for_status() 
         data = fpl_response.json()
         
+        # Extract current active gameweek info if available
+        events = pd.DataFrame(data.get('events', []))
+        current_gw = "Unknown"
+        if not events.empty and 'id' in events.columns:
+            active_event = events[events['is_current'] == True]
+            if not active_event.empty:
+                current_gw = str(active_event['id'].values[0])
+            else:
+                next_event = events[events['is_next'] == True]
+                if not next_event.empty:
+                    current_gw = f"Prior to GW {next_event['id'].values[0]}"
+
         players = pd.DataFrame(data['elements'])
         teams = pd.DataFrame(data['teams'])
         positions = pd.DataFrame(data['element_types'])
@@ -243,8 +254,9 @@ def get_fpl_data():
 
     except Exception as e:
         st.sidebar.error(f"Failed to fetch FPL base data. Error: {e}")
-        return None
+        return None, "Unknown"
 
+    # 2. Merge Custom Local NPxG JSON File
     try:
         file_path = os.path.join(os.path.dirname(__file__), "league-players.json")
         if os.path.exists(file_path):
@@ -281,9 +293,9 @@ def get_fpl_data():
     except Exception as e:
         st.sidebar.warning(f"Could not load league-players.json. Error: {e}")
 
-    return df
+    return df, current_gw
 
-df = get_fpl_data()
+df, active_gameweek = get_fpl_data()
 
 # --- Main App Interface ---
 st.title("FPL Advanced Player Explorer")
@@ -292,7 +304,14 @@ if not isinstance(df, pd.DataFrame) or df.empty:
     st.warning("Data failed to load. Please check the error messages in the sidebar.")
     st.stop()
 
-# --- Sidebar Filters ---
+# --- Sidebar Filters & Reminder ---
+st.sidebar.header("⚠️ Gameweek Maintenance")
+st.sidebar.info(
+    f"**Reminder:** A new gameweek has concluded or is underway (**GW {active_gameweek}**).\n\n"
+    "Don't forget to push your updated `league-players.json` file to GitHub with the latest NPxG stats!"
+)
+
+st.sidebar.divider()
 st.sidebar.header("Filter Players")
 search_name = st.sidebar.text_input("Look up by Web Name (separate by commas)")
 
