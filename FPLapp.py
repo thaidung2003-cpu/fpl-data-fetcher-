@@ -237,9 +237,15 @@ def get_fpl_data():
         st.sidebar.error(f"Failed to fetch FPL base data. Error: {e}")
         return None
 
-    # 2. Read Local JSON File directly from repository
+    # 2. Read Local JSON File safely using Python's json library
     try:
-        npxg_df = pd.read_json("league-players.json")
+        import os
+        file_path = os.path.join(os.path.dirname(__file__), "league-players.json")
+        
+        with open(file_path, "r", encoding="utf-8") as f:
+            npxg_data = json.load(f)
+            
+        npxg_df = pd.DataFrame(npxg_data)
         
         df['Full Name'] = df['First Name'].astype(str) + ' ' + df['Last Name'].astype(str)
         fpl_full_names = df['Full Name'].tolist()
@@ -270,9 +276,6 @@ def get_fpl_data():
         st.sidebar.warning(f"Could not load league-players.json. Error: {e}")
 
     return df
-
-df = get_fpl_data()
-
 # --- Main App Interface ---
 st.title("FPL Advanced Player Explorer")
 
