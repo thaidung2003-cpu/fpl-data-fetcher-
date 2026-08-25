@@ -4,6 +4,7 @@ import numpy as np
 import requests
 import json
 import difflib
+import os
 
 st.set_page_config(layout="wide", page_title="FPL Advanced Analytics")
 
@@ -14,7 +15,7 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
     show_labels_js = "true" if show_labels else "false"
     
     x_asc_js = "true" if x_order == "Ascending" else "false"
-    y_asc_js = "true" if y_order == "Ascending" else "false"
+    y_asc_js = "true" if y_order == "Descending" else "false"
 
     d3_code = f"""
     <!DOCTYPE html>
@@ -190,7 +191,6 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
 # --- Data Fetching and Processing ---
 @st.cache_data(ttl=3600)
 def get_fpl_data():
-    # 1. Fetch Official FPL Data Online
     try:
         url = "https://fantasy.premierleague.com/api/bootstrap-static/"
         fpl_headers = {
@@ -208,6 +208,7 @@ def get_fpl_data():
         df = players.merge(teams[['id', 'short_name']], left_on='team', right_on='id', how='left')
         df = df.merge(positions[['id', 'singular_name_short']], left_on='element_type', right_on='id', how='left')
         
+        # Convert official FPL API stats (including xG and xA strings) into proper numeric types
         for col in df.columns:
             if df[col].dtype == 'object' and col not in ['first_name', 'second_name', 'web_name', 'short_name', 'singular_name_short', 'photo', 'status', 'news']:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
@@ -215,7 +216,8 @@ def get_fpl_data():
         base_cols = [
             'first_name', 'second_name', 'web_name', 'short_name', 'singular_name_short', 'now_cost', 
             'total_points', 'selected_by_percent', 'form', 'points_per_game', 'minutes', 'starts',
-            'goals_scored', 'assists', 'clean_sheets', 'goals_conceded'
+            'goals_scored', 'assists', 'clean_sheets', 'goals_conceded',
+            'expected_goals', 'expected_assists', 'expected_goal_involvements'
         ]
         
         df = df[[c for c in base_cols if c in df.columns]]
@@ -224,7 +226,8 @@ def get_fpl_data():
             'first_name': 'First Name', 'second_name': 'Last Name', 'web_name': 'Web Name', 'short_name': 'Team', 'singular_name_short': 'Position', 
             'now_cost': 'Cost (M)', 'total_points': 'Total Points', 'selected_by_percent': 'Selected By (%)',
             'points_per_game': 'PPG', 'goals_scored': 'Goals', 'clean_sheets': 'Clean Sheets', 'goals_conceded': 'GC',
-            'minutes': 'Minutes Played', 'starts': 'Starts'
+            'minutes': 'Minutes Played', 'starts': 'Starts',
+            'expected_goals': 'xG', 'expected_assists': 'xA', 'expected_goal_involvements': 'xGI'
         }
         df.rename(columns=rename_dict, inplace=True)
         
@@ -232,45 +235,50 @@ def get_fpl_data():
             df['Cost (M)'] = df['Cost (M)'] / 10 
         if 'Minutes Played' in df.columns:
             df['Minutes Played'] = pd.to_numeric(df['Minutes Played'], errors='coerce').fillna(0)
+            
+        # Calculate Per-90 for official FPL xG and xA metrics
+        for col in ['xG', 'xA', 'xGI']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+                df[f'{col}90'] = np.where(df['Minutes Played'] > 0, (df[col] / df['Minutes Played']) * 90, 0).round(2)
 
     except Exception as e:
         st.sidebar.error(f"Failed to fetch FPL base data. Error: {e}")
         return None
 
-    # 2. Read Local JSON File safely using Python's json library
+    # 2. Merge Custom Local NPxG JSON File
     try:
-        import os
         file_path = os.path.join(os.path.dirname(__file__), "league-players.json")
-        
-        with open(file_path, "r", encoding="utf-8-sig") as f:
-            npxg_data = json.load(f)
+        if os.path.exists(file_path):
+            with open(file_path, "r", encoding="utf-8-sig") as f:
+                npxg_data = json.load(f)
+                
+            npxg_df = pd.DataFrame(npxg_data)
             
-        npxg_df = pd.DataFrame(npxg_data)
-        
-        df['Full Name'] = df['First Name'].astype(str) + ' ' + df['Last Name'].astype(str)
-        fpl_full_names = df['Full Name'].tolist()
-        fpl_web_names = df['Web Name'].tolist()
-        web_to_full_map = df.set_index('Web Name')['Full Name'].to_dict()
-        
-        match_dict = {}
-        for custom_name in npxg_df['player']:
-            clean_name = str(custom_name).strip()
-            matches = difflib.get_close_matches(clean_name, fpl_full_names, n=1, cutoff=0.65)
-            if matches:
-                match_dict[custom_name] = matches[0]
-            else:
-                web_matches = difflib.get_close_matches(clean_name, fpl_web_names, n=1, cutoff=0.6)
-                if web_matches:
-                    match_dict[custom_name] = web_to_full_map[web_matches[0]]
-                    
-        npxg_df['matched_full_name'] = npxg_df['player'].map(match_dict)
-        npxg_clean = npxg_df.dropna(subset=['matched_full_name']).drop_duplicates(subset=['matched_full_name'])
-        
-        df = df.merge(npxg_clean[['matched_full_name', 'NPxG', 'NPxG90']], left_on='Full Name', right_on='matched_full_name', how='left')
-        
-        df['NPxG'] = df['NPxG'].fillna(0.0)
-        df['NPxG90'] = df['NPxG90'].fillna(0.0)
-        df.drop(columns=['matched_full_name', 'Full Name'], inplace=True)
+            df['Full Name'] = df['First Name'].astype(str) + ' ' + df['Last Name'].astype(str)
+            fpl_full_names = df['Full Name'].tolist()
+            fpl_web_names = df['Web Name'].tolist()
+            web_to_full_map = df.set_index('Web Name')['Full Name'].to_dict()
+            
+            match_dict = {}
+            for custom_name in npxg_df['player']:
+                clean_name = str(custom_name).strip()
+                matches = difflib.get_close_matches(clean_name, fpl_full_names, n=1, cutoff=0.65)
+                if matches:
+                    match_dict[custom_name] = matches[0]
+                else:
+                    web_matches = difflib.get_close_matches(clean_name, fpl_web_names, n=1, cutoff=0.6)
+                    if web_matches:
+                        match_dict[custom_name] = web_to_full_map[web_matches[0]]
+                        
+            npxg_df['matched_full_name'] = npxg_df['player'].map(match_dict)
+            npxg_clean = npxg_df.dropna(subset=['matched_full_name']).drop_duplicates(subset=['matched_full_name'])
+            
+            df = df.merge(npxg_clean[['matched_full_name', 'NPxG', 'NPxG90']], left_on='Full Name', right_on='matched_full_name', how='left')
+            
+            df['NPxG'] = df['NPxG'].fillna(0.0)
+            df['NPxG90'] = df['NPxG90'].fillna(0.0)
+            df.drop(columns=['matched_full_name', 'Full Name'], inplace=True)
             
     except Exception as e:
         st.sidebar.warning(f"Could not load league-players.json. Error: {e}")
@@ -278,10 +286,10 @@ def get_fpl_data():
     return df
 
 df = get_fpl_data()
+
 # --- Main App Interface ---
 st.title("FPL Advanced Player Explorer")
 
-# Safe handling if data failed to load or returned None
 if not isinstance(df, pd.DataFrame) or df.empty:
     st.warning("Data failed to load. Please check the error messages in the sidebar.")
     st.stop()
@@ -337,8 +345,8 @@ core_cols = ['First Name', 'Last Name', 'Web Name', 'Team', 'Position', 'Cost (M
 other_cols = sorted([c for c in filtered_df.columns if c not in core_cols])
 logical_columns = [c for c in core_cols if c in filtered_df.columns] + other_cols
 
-x_cols_pulled = [c for c in other_cols if c.lower().startswith('x') or 'npxg' in c.lower()]
-default_cols = [c for c in ['Web Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'Minutes Played'] if c in logical_columns] + x_cols_pulled
+x_cols_pulled = [c for c in other_cols if c in ['xG', 'xA', 'xGI', 'xG90', 'xA90', 'xGI90', 'NPxG', 'NPxG90'] or c.lower().startswith('x')]
+default_cols = [c for c in ['Web Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'Minutes Played'] if c in logical_columns] + x_cols_pulled[:3]
 selected_columns = st.sidebar.multiselect("Select Table Columns", logical_columns, default=default_cols)
 display_df = filtered_df[selected_columns]
 
@@ -357,7 +365,7 @@ if show_graph:
         st.sidebar.subheader("Select Graph Axes")
         
         default_x = 'Cost (M)' if 'Cost (M)' in all_numeric_cols else all_numeric_cols[0]
-        default_y = 'NPxG' if 'NPxG' in all_numeric_cols else ('Total Points' if 'Total Points' in all_numeric_cols else all_numeric_cols[-1])
+        default_y = 'xG' if 'xG' in all_numeric_cols else ('Total Points' if 'Total Points' in all_numeric_cols else all_numeric_cols[-1])
         
         x_axis = st.sidebar.selectbox("X-Axis", all_numeric_cols, index=all_numeric_cols.index(default_x), key="x_axis_select")
         x_order = st.sidebar.radio("X-Axis Order", ["Ascending", "Descending"], horizontal=True, key="x_axis_order")
