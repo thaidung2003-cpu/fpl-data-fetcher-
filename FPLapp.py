@@ -311,7 +311,14 @@ def fetch_fpl_data():
         # Clean up the temporary helper columns
         df.drop(columns=['matched_full_name', 'Full Name'], inplace=True)
         
-    except Exception as e:
+except Exception as e:
+        # This will pop up a red error box in your app showing exactly what went wrong
+        st.sidebar.error(f"FBref Scrape Error: {e}")
+        
+        # If FBref blocked us, this will show the specific HTTP error code (like 403 or 429)
+        if 'response' in locals():
+            st.sidebar.error(f"FBref HTTP Status: {response.status_code}")
+            
         df['nPxG'] = 0.0
         df['nPxG90'] = 0.0
 
