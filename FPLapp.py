@@ -262,7 +262,7 @@ def fetch_fpl_data():
             opta_df = opta_df[opta_df['league'] == 'EPL']
             
         if 'season' in opta_df.columns:
-            opta_df = opta_df[opta_df['season'] == '2024-2025']
+            opta_df = opta_df[opta_df['season'] == '2026-2027']
             
         player_col = 'player_name' if 'player_name' in opta_df.columns else 'player'
         mins_col = 'minutes' if 'minutes' in opta_df.columns else 'mins'
