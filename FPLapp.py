@@ -15,7 +15,7 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
     show_labels_js = "true" if show_labels else "false"
     
     x_asc_js = "true" if x_order == "Ascending" else "false"
-    y_asc_js = "true" if y_order == "Descending" else "false"
+    y_asc_js = "true" if y_order == "Ascending" else "false"
 
     d3_code = f"""
     <!DOCTYPE html>
@@ -118,6 +118,7 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
     const yMax = d3.max(data, d => d[yName]);
 
     const xDomain = xAsc ? [xMin * 0.95, xMax * 1.05] : [xMax * 1.05, xMin * 0.95];
+    // Respects Y-axis ascending vs descending toggle properly
     const yDomain = yAsc ? [yMin * 0.95, yMax * 1.05] : [yMax * 1.05, yMin * 0.95];
 
     const xScale = d3.scaleLinear().domain(xDomain).range([0, innerWidth]);
@@ -208,7 +209,6 @@ def get_fpl_data():
         df = players.merge(teams[['id', 'short_name']], left_on='team', right_on='id', how='left')
         df = df.merge(positions[['id', 'singular_name_short']], left_on='element_type', right_on='id', how='left')
         
-        # Convert official FPL API stats (including xG and xA strings) into proper numeric types
         for col in df.columns:
             if df[col].dtype == 'object' and col not in ['first_name', 'second_name', 'web_name', 'short_name', 'singular_name_short', 'photo', 'status', 'news']:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
@@ -236,7 +236,6 @@ def get_fpl_data():
         if 'Minutes Played' in df.columns:
             df['Minutes Played'] = pd.to_numeric(df['Minutes Played'], errors='coerce').fillna(0)
             
-        # Calculate Per-90 for official FPL xG and xA metrics
         for col in ['xG', 'xA', 'xGI']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
@@ -246,7 +245,6 @@ def get_fpl_data():
         st.sidebar.error(f"Failed to fetch FPL base data. Error: {e}")
         return None
 
-    # 2. Merge Custom Local NPxG JSON File
     try:
         file_path = os.path.join(os.path.dirname(__file__), "league-players.json")
         if os.path.exists(file_path):
