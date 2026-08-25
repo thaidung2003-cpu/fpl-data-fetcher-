@@ -276,6 +276,8 @@ def get_fpl_data():
         st.sidebar.warning(f"Could not load league-players.json. Error: {e}")
 
     return df
+
+df = get_fpl_data()
 # --- Main App Interface ---
 st.title("FPL Advanced Player Explorer")
 
