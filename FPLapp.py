@@ -195,15 +195,23 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
 # --- Data Fetching and Processing ---
 
 @st.cache_resource
+@st.cache_resource
 def setup_r_environment():
-    """Installs the panna R package natively via rpy2 string evaluation."""
+    """Installs the panna R package natively via rpy2 string evaluation, 
+       forcing non-interactive mode so it doesn't hang on package updates."""
     robjects.r('''
+        # Force non-interactive mode to prevent Streamlit from hanging
+        options(repos = c(CRAN = "http://cran.us.r-project.org"))
+        Sys.setenv(R_REMOTES_NO_ERRORS_FROM_WARNINGS="true")
+        
         if (!require("devtools", character.only = TRUE)) {
-            install.packages("devtools", repos="http://cran.us.r-project.org")
+            install.packages("devtools", quiet=TRUE)
             library(devtools)
         }
+        
         if (!require("panna", character.only = TRUE)) {
-            devtools::install_github("peteowen1/panna")
+            # upgrade="never" is the magic bullet here. It prevents the infinite hang.
+            devtools::install_github("peteowen1/panna", upgrade="never", quiet=TRUE)
             library(panna)
         }
     ''')
