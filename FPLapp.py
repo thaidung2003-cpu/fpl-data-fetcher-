@@ -223,30 +223,40 @@ def get_fpl_data():
             if df[col].dtype == 'object' and col not in ['first_name', 'second_name', 'web_name', 'short_name', 'singular_name_short', 'photo', 'status', 'news']:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        base_cols = [
-            'first_name', 'second_name', 'web_name', 'short_name', 'singular_name_short', 'now_cost', 
-            'total_points', 'selected_by_percent', 'form', 'points_per_game', 'minutes', 'starts',
-            'goals_scored', 'assists', 'clean_sheets', 'goals_conceded',
-            'expected_goals', 'expected_assists', 'expected_goal_involvements'
-        ]
+        # Drop truly useless metadata columns so they don't clutter the app
+        useless_cols = ['id', 'team', 'element_type', 'team_code', 'chance_of_playing_next_round', 'chance_of_playing_this_round', 'photo', 'status', 'news', 'news_added', 'squad_number', 'ep_this', 'ep_next', 'in_dreamteam']
+        df.drop(columns=[c for c in useless_cols if c in df.columns], inplace=True)
         
-        df = df[[c for c in base_cols if c in df.columns]]
-        
+        # Format explicitly known columns
         rename_dict = {
             'first_name': 'First Name', 'second_name': 'Last Name', 'web_name': 'Web Name', 'short_name': 'Team', 'singular_name_short': 'Position', 
             'now_cost': 'Cost (M)', 'total_points': 'Total Points', 'selected_by_percent': 'Selected By (%)',
             'points_per_game': 'PPG', 'goals_scored': 'Goals', 'clean_sheets': 'Clean Sheets', 'goals_conceded': 'GC',
             'minutes': 'Minutes Played', 'starts': 'Starts',
-            'expected_goals': 'xG', 'expected_assists': 'xA', 'expected_goal_involvements': 'xGI'
+            'expected_goals': 'xG', 'expected_assists': 'xA', 'expected_goal_involvements': 'xGI',
+            'expected_goals_conceded': 'xGC', 'bonus': 'Bonus', 'bps': 'BPS', 'saves': 'Saves',
+            'influence': 'Influence', 'creativity': 'Creativity', 'threat': 'Threat', 'ict_index': 'ICT Index',
+            'yellow_cards': 'Yellow Cards', 'red_cards': 'Red Cards', 'penalties_saved': 'Penalties Saved',
+            'penalties_missed': 'Penalties Missed', 'own_goals': 'Own Goals'
         }
         df.rename(columns=rename_dict, inplace=True)
+        
+        # Dynamically format any remaining unknown columns neatly
+        new_cols = []
+        for c in df.columns:
+            if c not in rename_dict.values():
+                clean_name = str(c).replace('_', ' ').title()
+                new_cols.append(clean_name)
+            else:
+                new_cols.append(c)
+        df.columns = new_cols
         
         if 'Cost (M)' in df.columns:
             df['Cost (M)'] = df['Cost (M)'] / 10 
         if 'Minutes Played' in df.columns:
             df['Minutes Played'] = pd.to_numeric(df['Minutes Played'], errors='coerce').fillna(0)
             
-        for col in ['xG', 'xA', 'xGI']:
+        for col in ['xG', 'xA', 'xGI', 'xGC']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
                 df[f'{col}90'] = np.where(df['Minutes Played'] > 0, (df[col] / df['Minutes Played']) * 90, 0).round(2)
