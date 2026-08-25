@@ -273,8 +273,8 @@ def fetch_fpl_data():
 # --- Main App Interface ---
 st.title("FPL Advanced Player Explorer")
 
-# Safe handling if data failed to load
-if df.empty:
+# Safe handling if data failed to load or returned None
+if df is None or df.empty:
     st.warning("Data failed to load. Please check the error messages in the sidebar.")
     st.stop()
 
