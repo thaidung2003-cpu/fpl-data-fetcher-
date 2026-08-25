@@ -242,7 +242,7 @@ def get_fpl_data():
         import os
         file_path = os.path.join(os.path.dirname(__file__), "league-players.json")
         
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, "r", encoding="utf-8-sig") as f:
             npxg_data = json.load(f)
             
         npxg_df = pd.DataFrame(npxg_data)
