@@ -201,7 +201,6 @@ def get_fpl_data():
         fpl_response.raise_for_status() 
         data = fpl_response.json()
         
-        # Extract current active gameweek info if available
         events = pd.DataFrame(data.get('events', []))
         current_gw = "Unknown"
         if not events.empty and 'id' in events.columns:
@@ -256,7 +255,6 @@ def get_fpl_data():
         st.sidebar.error(f"Failed to fetch FPL base data. Error: {e}")
         return None, "Unknown"
 
-    # 2. Merge Custom Local NPxG JSON File
     try:
         file_path = os.path.join(os.path.dirname(__file__), "league-players.json")
         if os.path.exists(file_path):
@@ -304,12 +302,19 @@ if not isinstance(df, pd.DataFrame) or df.empty:
     st.warning("Data failed to load. Please check the error messages in the sidebar.")
     st.stop()
 
-# --- Sidebar Filters & Reminder ---
-st.sidebar.header("⚠️ Gameweek Maintenance")
-st.sidebar.info(
-    f"**Reminder:** A new gameweek has concluded or is underway (**GW {active_gameweek}**).\n\n"
-    "Don't forget to push your updated `league-players.json` file to GitHub with the latest NPxG stats!"
-)
+# --- Sidebar Filters & Dismissible Reminder ---
+if "dismiss_reminder" not in st.session_state:
+    st.session_state.dismiss_reminder = False
+
+if not st.session_state.dismiss_reminder:
+    with st.sidebar.container(border=True):
+        col1, col2 = st.columns([6, 1])
+        with col1:
+            st.markdown(f"**⚠️ GW {active_gameweek}**\n\nPush updated `league-players.json` to GitHub!")
+        with col2:
+            if st.button("✖", key="dismiss_btn", help="Dismiss"):
+                st.session_state.dismiss_reminder = True
+                st.rerun()
 
 st.sidebar.divider()
 st.sidebar.header("Filter Players")
