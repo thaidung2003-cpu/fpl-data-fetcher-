@@ -8,11 +8,10 @@ import difflib
 # --- R Integration for Panna ---
 import rpy2.robjects as robjects
 from rpy2.robjects import pandas2ri
+from rpy2.robjects import default_converter
+from rpy2.robjects.conversion import localconverter
 import rpy2.robjects.packages as rpackages
 from rpy2.robjects.vectors import StrVector
-
-# Enable automatic conversion between R dataframes and Pandas
-pandas2ri.activate()
 
 st.set_page_config(layout="wide", page_title="FPL Advanced Analytics")
 
@@ -255,7 +254,7 @@ def fetch_fpl_data():
     if 'Minutes Played' in df.columns:
         df['Minutes Played'] = pd.to_numeric(df['Minutes Played'], errors='coerce').fillna(0)
 
-    # 2. Native R Package Integration
+    # 2. Native R Package Integration using localconverter
     try:
         # Load the R package (will install automatically on first boot)
         panna = setup_r_environment()
@@ -263,14 +262,17 @@ def fetch_fpl_data():
         # Download / sync data exactly as the R documentation specifies
         panna.pb_download_opta()
         
-        # Load Opta stats using the native R function
-        r_stats = panna.load_opta_stats("EPL", "2024-2025")
-        opta_df = robjects.conversion.rpy2py(r_stats)
+        # Load Opta stats using the native R function and convert it locally
+        r_stats = panna.load_opta_stats("EPL", "2026-2027")
+        with localconverter(default_converter + pandas2ri.converter):
+            opta_df = robjects.conversion.rpy2py(r_stats)
         
         # Try to load xmetrics to ensure expected metrics are present
         try:
-            r_xmetrics = panna.load_opta_xmetrics("EPL", "2024-2025")
-            xmetrics_df = robjects.conversion.rpy2py(r_xmetrics)
+            r_xmetrics = panna.load_opta_xmetrics("EPL", "2026-2027")
+            with localconverter(default_converter + pandas2ri.converter):
+                xmetrics_df = robjects.conversion.rpy2py(r_xmetrics)
+            
             common_cols = list(set(opta_df.columns) & set(xmetrics_df.columns))
             merge_key = 'player_name' if 'player_name' in common_cols else ('player' if 'player' in common_cols else None)
             if merge_key:
