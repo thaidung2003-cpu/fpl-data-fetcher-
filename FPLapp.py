@@ -269,7 +269,7 @@ def get_fpl_data():
     except Exception as e:
         st.sidebar.warning(f"Could not load league-players.json. Error: {e}")
 
-    return df = get_fpl_data()
+    return df 
 # --- Main App Interface ---
 st.title("FPL Advanced Player Explorer")
 
