@@ -1,6 +1,5 @@
-streamlit
+sstreamlit
 pandas
 numpy
 requests
-lxml
-rpy2
+pyarrow
