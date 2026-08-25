@@ -22,7 +22,6 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
     <style>
     body {{ font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #121212; color: #f2f2f2; margin: 0; padding: 0; overflow: auto; }}
     
-    /* --- Custom Dark Scrollbars --- */
     ::-webkit-scrollbar {{ width: 14px; height: 14px; }}
     ::-webkit-scrollbar-track {{ background: #121212; }}
     ::-webkit-scrollbar-thumb {{ background: #444; border-radius: 10px; border: 4px solid #121212; }}
@@ -36,7 +35,6 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
     .footnote {{ font-size: 12px; fill: #999; font-style: italic; }}
     .dot-circle {{ stroke: #ffffff; stroke-width: 1px; cursor: pointer; transition: stroke-width 0.1s; }}
     
-    /* Text Halo for Screenshot Legibility */
     .label {{ 
         font-size: 12px; 
         font-weight: 500; 
@@ -48,7 +46,6 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
         pointer-events: none; 
     }}
 
-    /* Interactive Tooltip Styling */
     .tooltip {{
         position: absolute;
         text-align: left;
@@ -193,6 +190,7 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
 # --- Data Fetching and Processing ---
 @st.cache_data(ttl=3600)
 def fetch_fpl_data():
+    # 1. Fetch Official FPL Data Online
     url = "https://fantasy.premierleague.com/api/bootstrap-static/"
     data = requests.get(url).json()
     
@@ -210,124 +208,101 @@ def fetch_fpl_data():
     base_cols = [
         'first_name', 'second_name', 'web_name', 'short_name', 'singular_name_short', 'now_cost', 
         'total_points', 'selected_by_percent', 'form', 'points_per_game', 'minutes', 'starts',
-        'goals_scored', 'assists', 'clean_sheets', 'goals_conceded', 'own_goals', 
-        'yellow_cards', 'red_cards', 'saves', 'bonus', 'bps', 'influence', 'creativity', 'threat', 'ict_index', 
-        'expected_goals', 'expected_assists', 'expected_goal_involvements', 'expected_goals_conceded',
-        'defensive_contribution'
+        'goals_scored', 'assists', 'clean_sheets', 'goals_conceded'
     ]
     
-    native_per_90_cols = [c for c in df.columns if str(c).endswith('_per_90')]
-    cols_to_keep = list(set(base_cols + native_per_90_cols))
-    
-    df = df[[c for c in cols_to_keep if c in df.columns]]
+    df = df[[c for c in base_cols if c in df.columns]]
     
     rename_dict = {
         'first_name': 'First Name', 'second_name': 'Last Name', 'web_name': 'Web Name', 'short_name': 'Team', 'singular_name_short': 'Position', 
         'now_cost': 'Cost (M)', 'total_points': 'Total Points', 'selected_by_percent': 'Selected By (%)',
         'points_per_game': 'PPG', 'goals_scored': 'Goals', 'clean_sheets': 'Clean Sheets', 'goals_conceded': 'GC',
-        'expected_goals': 'xG', 'expected_assists': 'xA', 'expected_goal_involvements': 'xGI', 
-        'expected_goals_conceded': 'xGC', 'ict_index': 'ICT Index', 'bps': 'BPS', 'minutes': 'Minutes Played',
-        'defensive_contribution': 'Defcons', 'starts': 'Starts',
-        'expected_goals_per_90': 'xG90', 'expected_assists_per_90': 'xA90', 'expected_goal_involvements_per_90': 'xGI90',
-        'expected_goals_conceded_per_90': 'xGC90', 'goals_conceded_per_90': 'GC90', 'saves_per_90': 'Saves90',
-        'starts_per_90': 'Starts90', 'clean_sheets_per_90': 'Clean Sheets90', 'defensive_contribution_per_90': 'Defcons90'
+        'minutes': 'Minutes Played', 'starts': 'Starts'
     }
     df.rename(columns=rename_dict, inplace=True)
-    df.columns = [col.replace('_', ' ').title() if col.islower() else col for col in df.columns]
     
     if 'Cost (M)' in df.columns:
         df['Cost (M)'] = df['Cost (M)'] / 10 
-
     if 'Minutes Played' in df.columns:
         df['Minutes Played'] = pd.to_numeric(df['Minutes Played'], errors='coerce').fillna(0)
 
-    numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns.tolist()
-    skip_90 = ['Cost (M)', 'Minutes Played', 'Chance Of Playing Next Round', 'Chance Of Playing This Round']
-    
-    for col in numeric_cols:
-        if col not in skip_90 and not str(col).endswith('90'):
-            new_col_90 = f"{col}90"
-            if new_col_90 not in df.columns:
-                df[new_col_90] = np.where(df['Minutes Played'] > 0, (df[col] / df['Minutes Played']) * 90, 0)
-                df[new_col_90] = df[new_col_90].round(2)
-
-    # --- Live FBref Automation ---
+    # 2. Fetch Opta Data Directly from GitHub Releases
     try:
-        fbref_url = "https://fbref.com/en/comps/9/stats/Premier-League-Stats"
+        # Target the GitHub Release tagged 'opta-latest'.
+        # Try 'player_stats.parquet' as per the documentation image. 
+        # (If x-stats are kept separate, you may need to change this to 'xmetrics.parquet')
+        OPTA_DATA_URL = "https://github.com/peteowen1/pannadata/releases/download/opta-latest/player_stats.parquet"
         
-        # We need headers so FBref doesn't instantly drop the request
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
+        # Pandas dynamically downloads and parses the Parquet file over the internet
+        opta_df = pd.read_parquet(OPTA_DATA_URL)
         
-        response = requests.get(fbref_url, headers=headers, timeout=15)
+        # Filter for EPL if the parquet contains multiple leagues
+        if 'competition' in opta_df.columns:
+            opta_df = opta_df[opta_df['competition'] == 'EPL']
+        elif 'league' in opta_df.columns:
+            opta_df = opta_df[opta_df['league'] == 'EPL']
+            
+        # Dynamically detect player and minutes columns
+        player_col = 'player_name' if 'player_name' in opta_df.columns else 'player'
+        mins_col = 'minutes' if 'minutes' in opta_df.columns else 'mins'
         
-        # Read the standard stats table directly from the HTML
-        tables = pd.read_html(response.text, attrs={"id": "stats_standard"})
-        fbref_df = tables[0]
+        # --- DYNAMIC X-STATS EXTRACTION ---
+        # Automatically detects any column that represents Expected stats (starts with 'x' or contains 'npxg')
+        x_stat_cols = [col for col in opta_df.columns if str(col).lower().startswith('x') or 'npxg' in str(col).lower()]
         
-        # Drop the multi-level top header that FBref uses
-        fbref_df.columns = fbref_df.columns.droplevel(0)
+        # Filter dataframe strictly to Player, Minutes, and the extracted X-Stats
+        cols_to_keep = [player_col, mins_col] + x_stat_cols
+        opta_df = opta_df[[c for c in cols_to_keep if c in opta_df.columns]].dropna(subset=[player_col])
         
-        # Extract only what we need and remove FBref's repeating header rows
-        fbref_df = fbref_df[['Player', 'npxG', 'Min']].dropna(subset=['Player'])
-        fbref_df = fbref_df[fbref_df['Player'] != 'Player']
+        opta_df[mins_col] = pd.to_numeric(opta_df[mins_col], errors='coerce').fillna(0)
         
-        # Clean the minutes column (FBref adds commas for players over 999 mins, e.g. "1,245")
-        fbref_df['Min'] = pd.to_numeric(fbref_df['Min'].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
-        fbref_df['npxG'] = pd.to_numeric(fbref_df['npxG'], errors='coerce').fillna(0.0)
+        # Calculate Per-90 standard metrics for every single extracted x-stat
+        for x_col in x_stat_cols:
+            opta_df[x_col] = pd.to_numeric(opta_df[x_col], errors='coerce').fillna(0.0)
+            per90_name = f"{x_col}90"
+            opta_df[per90_name] = np.where(opta_df[mins_col] > 0, (opta_df[x_col] / opta_df[mins_col]) * 90, 0).round(2)
         
-        # Calculate Per-90 manually to ensure it perfectly aligns
-        fbref_df['nPxG90'] = np.where(fbref_df['Min'] > 0, (fbref_df['npxG'] / fbref_df['Min']) * 90, 0).round(2)
-        
-        # Create Full Names in the FPL data for highly accurate matching
+        # Build Match Maps to perfectly sync Opta names to FPL names
         df['Full Name'] = df['First Name'] + ' ' + df['Last Name']
         web_to_full_map = df.set_index('Web Name')['Full Name'].to_dict()
         fpl_full_names = df['Full Name'].tolist()
         fpl_web_names = df['Web Name'].tolist()
         
         match_dict = {}
-        for fb_name in fbref_df['Player']:
-            # Strip out extra FBref formatting and country codes
-            clean_name = fb_name.split('\\')[0].strip()
+        for opta_name in opta_df[player_col]:
+            clean_name = str(opta_name).split('\\')[0].strip()
             
             full_matches = difflib.get_close_matches(clean_name, fpl_full_names, n=1, cutoff=0.65)
             if full_matches:
-                match_dict[fb_name] = full_matches[0]
+                match_dict[opta_name] = full_matches[0]
             else:
                 web_matches = difflib.get_close_matches(clean_name, fpl_web_names, n=1, cutoff=0.6)
                 if web_matches:
-                    match_dict[fb_name] = web_to_full_map[web_matches[0]]
+                    match_dict[opta_name] = web_to_full_map[web_matches[0]]
                     
-        fbref_df['matched_full_name'] = fbref_df['Player'].map(match_dict)
-        udf_clean = fbref_df.dropna(subset=['matched_full_name']).drop_duplicates(subset=['matched_full_name'])
+        opta_df['matched_full_name'] = opta_df[player_col].map(match_dict)
+        opta_clean = opta_df.dropna(subset=['matched_full_name']).drop_duplicates(subset=['matched_full_name'])
         
-        # Safely merge into the main DataFrame
-        df = df.merge(udf_clean[['matched_full_name', 'npxG', 'nPxG90']], left_on='Full Name', right_on='matched_full_name', how='left')
-        df.rename(columns={'npxG': 'nPxG'}, inplace=True)
-        df['nPxG'] = df['nPxG'].fillna(0.0)
-        df['nPxG90'] = df['nPxG90'].fillna(0.0)
+        # Merge all dynamically detected Opta X-Stats back into the FPL dataframe
+        merge_cols = ['matched_full_name'] + x_stat_cols + [f"{c}90" for c in x_stat_cols]
+        df = df.merge(opta_clean[merge_cols], left_on='Full Name', right_on='matched_full_name', how='left')
         
-        # Clean up the temporary helper columns
+        # Clean up NaNs created by merge
+        for col in x_stat_cols + [f"{c}90" for c in x_stat_cols]:
+            df[col] = df[col].fillna(0.0)
+            
         df.drop(columns=['matched_full_name', 'Full Name'], inplace=True)
         
     except Exception as e:
-        # This will pop up a red error box in your app showing exactly what went wrong
-        st.sidebar.error(f"FBref Scrape Error: {e}")
-        
-        # If FBref blocked us, this will show the specific HTTP error code (like 403 or 429)
-        if 'response' in locals():
-            st.sidebar.error(f"FBref HTTP Status: {response.status_code}")
-            
-        df['nPxG'] = 0.0
-        df['nPxG90'] = 0.0
+        # If the remote fetch fails, this alert will pop up in your deployed app letting you know exactly why
+        st.sidebar.warning(f"Failed to fetch remote Opta data from Pannadata Releases. Error: {e}")
 
     return df
 
 df = fetch_fpl_data()
 
 # --- Main App Interface ---
-st.title("FPL Advanced Player Explorer")
+st.title("FPL Advanced Player Explorer (Opta X-Stats Powered)")
 
 # --- Sidebar Filters ---
 st.sidebar.header("Filter Players")
@@ -338,7 +313,6 @@ all_positions = df['Position'].unique().tolist() if not df.empty else []
 selected_positions = st.sidebar.multiselect("Categorize by Position", all_positions, default=all_positions)
 
 max_mins_played = int(df['Minutes Played'].max()) if not df.empty and df['Minutes Played'].max() > 0 else 90
-
 min_minutes = st.sidebar.number_input(
     "Minimum Minutes Played", 
     min_value=0, 
@@ -359,10 +333,7 @@ filtered_df = df.copy()
 if search_name:
     search_terms = [term.strip() for term in search_name.split(',') if term.strip()]
     search_pattern = '|'.join(search_terms)
-    
-    filtered_df = filtered_df[
-        filtered_df['Web Name'].str.contains(search_pattern, case=False, na=False)
-    ]
+    filtered_df = filtered_df[filtered_df['Web Name'].str.contains(search_pattern, case=False, na=False)]
 
 if selected_teams:
     filtered_df = filtered_df[filtered_df['Team'].isin(selected_teams)]
@@ -379,7 +350,9 @@ core_cols = ['First Name', 'Last Name', 'Web Name', 'Team', 'Position', 'Cost (M
 other_cols = sorted([c for c in filtered_df.columns if c not in core_cols])
 logical_columns = core_cols + other_cols
 
-default_cols = ['Web Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'nPxG', 'nPxG90', 'Defcons90', 'Minutes Played']
+# Create dynamic default table columns depending on what x-stats were successfully pulled
+x_cols_pulled = [c for c in other_cols if c.lower().startswith('x') or 'npxg' in c.lower()]
+default_cols = ['Web Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'Minutes Played'] + x_cols_pulled[:3] 
 selected_columns = st.sidebar.multiselect("Select Table Columns", logical_columns, default=[c for c in default_cols if c in logical_columns])
 display_df = filtered_df[selected_columns]
 
@@ -396,15 +369,14 @@ if show_graph:
     
     st.sidebar.subheader("Select Graph Axes")
     
-    x_axis = st.sidebar.selectbox("X-Axis", all_numeric_cols, index=all_numeric_cols.index('nPxG90') if 'nPxG90' in all_numeric_cols else 0, key="x_axis_select")
+    x_axis = st.sidebar.selectbox("X-Axis", all_numeric_cols, index=all_numeric_cols.index(x_cols_pulled[0]) if len(x_cols_pulled) > 0 else 0, key="x_axis_select")
     x_order = st.sidebar.radio("X-Axis Order", ["Ascending", "Descending"], horizontal=True, key="x_axis_order")
     
-    y_axis = st.sidebar.selectbox("Y-Axis", all_numeric_cols, index=all_numeric_cols.index('Defcons90') if 'Defcons90' in all_numeric_cols else 1, key="y_axis_select")
+    y_axis = st.sidebar.selectbox("Y-Axis", all_numeric_cols, index=all_numeric_cols.index(x_cols_pulled[1]) if len(x_cols_pulled) > 1 else 1, key="y_axis_select")
     y_order = st.sidebar.radio("Y-Axis Order", ["Ascending", "Descending"], horizontal=True, key="y_axis_order")
 
 # --- Data Table Rendering ---
 st.write(f"Showing **{len(display_df)}** players after primary filters.")
-
 st.dataframe(display_df.style.format(precision=2), use_container_width=True, hide_index=True)
 
 # --- Graph Rendering ---
