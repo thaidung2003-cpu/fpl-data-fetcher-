@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import requests
 import json
-import difflib
 
 st.set_page_config(layout="wide", page_title="FPL Advanced Analytics")
 
@@ -190,130 +189,69 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
 # --- Data Fetching and Processing ---
 @st.cache_data(ttl=3600)
 def fetch_fpl_data():
-    # 1. Fetch Official FPL Data Online
-    url = "https://fantasy.premierleague.com/api/bootstrap-static/"
-    data = requests.get(url).json()
-    
-    players = pd.DataFrame(data['elements'])
-    teams = pd.DataFrame(data['teams'])
-    positions = pd.DataFrame(data['element_types'])
-    
-    df = players.merge(teams[['id', 'short_name']], left_on='team', right_on='id', how='left')
-    df = df.merge(positions[['id', 'singular_name_short']], left_on='element_type', right_on='id', how='left')
-    
-    for col in df.columns:
-        if df[col].dtype == 'object' and col not in ['first_name', 'second_name', 'web_name', 'short_name', 'singular_name_short', 'photo', 'status', 'news']:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-
-    base_cols = [
-        'first_name', 'second_name', 'web_name', 'short_name', 'singular_name_short', 'now_cost', 
-        'total_points', 'selected_by_percent', 'form', 'points_per_game', 'minutes', 'starts',
-        'goals_scored', 'assists', 'clean_sheets', 'goals_conceded'
-    ]
-    
-    df = df[[c for c in base_cols if c in df.columns]]
-    
-    rename_dict = {
-        'first_name': 'First Name', 'second_name': 'Last Name', 'web_name': 'Web Name', 'short_name': 'Team', 'singular_name_short': 'Position', 
-        'now_cost': 'Cost (M)', 'total_points': 'Total Points', 'selected_by_percent': 'Selected By (%)',
-        'points_per_game': 'PPG', 'goals_scored': 'Goals', 'clean_sheets': 'Clean Sheets', 'goals_conceded': 'GC',
-        'minutes': 'Minutes Played', 'starts': 'Starts'
-    }
-    df.rename(columns=rename_dict, inplace=True)
-    
-    if 'Cost (M)' in df.columns:
-        df['Cost (M)'] = df['Cost (M)'] / 10 
-    if 'Minutes Played' in df.columns:
-        df['Minutes Played'] = pd.to_numeric(df['Minutes Played'], errors='coerce').fillna(0)
-
-    # 2. Hardcoded Direct Fetch from the panna GitHub repository 
     try:
-        # Bypasses API rate limits and HTML structure entirely
-        stats_url = "https://github.com/peteowen1/panna/releases/download/opta-latest/player_stats.parquet"
-        xmetrics_url = "https://github.com/peteowen1/panna/releases/download/opta-latest/xmetrics.parquet"
+        # 1. Fetch Official FPL Data Online with a spoofed User-Agent
+        url = "https://fantasy.premierleague.com/api/bootstrap-static/"
+        fpl_headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
         
-        # Pandas handles the web request and redirect directly
-        opta_df = pd.read_parquet(stats_url)
+        fpl_response = requests.get(url, headers=fpl_headers)
+        fpl_response.raise_for_status() 
+        data = fpl_response.json()
         
-        # Try to pull in xmetrics too, safely failing if it's not present
-        try:
-            xmetrics_df = pd.read_parquet(xmetrics_url)
-            common_cols = list(set(opta_df.columns) & set(xmetrics_df.columns))
-            merge_key = 'player_name' if 'player_name' in common_cols else ('player' if 'player' in common_cols else None)
-            if merge_key:
-                opta_df = opta_df.merge(xmetrics_df, on=merge_key, how='left', suffixes=('', '_drop'))
-                opta_df = opta_df.loc[:, ~opta_df.columns.str.endswith('_drop')]
-        except Exception:
-            pass
+        players = pd.DataFrame(data['elements'])
+        teams = pd.DataFrame(data['teams'])
+        positions = pd.DataFrame(data['element_types'])
+        
+        df = players.merge(teams[['id', 'short_name']], left_on='team', right_on='id', how='left')
+        df = df.merge(positions[['id', 'singular_name_short']], left_on='element_type', right_on='id', how='left')
+        
+        for col in df.columns:
+            if df[col].dtype == 'object' and col not in ['first_name', 'second_name', 'web_name', 'short_name', 'singular_name_short', 'photo', 'status', 'news']:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        # Filter for EPL 2024-2025
-        if 'competition' in opta_df.columns:
-            opta_df = opta_df[opta_df['competition'] == 'EPL']
-        elif 'league' in opta_df.columns:
-            opta_df = opta_df[opta_df['league'] == 'EPL']
-            
-        if 'season' in opta_df.columns:
-            opta_df = opta_df[opta_df['season'] == '2024-2025']
-            
-        player_col = 'player_name' if 'player_name' in opta_df.columns else 'player'
-        mins_col = 'minutes' if 'minutes' in opta_df.columns else 'mins'
+        base_cols = [
+            'first_name', 'second_name', 'web_name', 'short_name', 'singular_name_short', 'now_cost', 
+            'total_points', 'selected_by_percent', 'form', 'points_per_game', 'minutes', 'starts',
+            'goals_scored', 'assists', 'clean_sheets', 'goals_conceded'
+        ]
         
-        # --- DYNAMIC X-STATS EXTRACTION ---
-        x_stat_cols = [col for col in opta_df.columns if str(col).lower().startswith('x') or 'npxg' in str(col).lower()]
+        df = df[[c for c in base_cols if c in df.columns]]
         
-        cols_to_keep = [player_col, mins_col] + x_stat_cols
-        opta_df = opta_df[[c for c in cols_to_keep if c in opta_df.columns]].dropna(subset=[player_col])
-        opta_df[mins_col] = pd.to_numeric(opta_df[mins_col], errors='coerce').fillna(0)
+        rename_dict = {
+            'first_name': 'First Name', 'second_name': 'Last Name', 'web_name': 'Web Name', 'short_name': 'Team', 'singular_name_short': 'Position', 
+            'now_cost': 'Cost (M)', 'total_points': 'Total Points', 'selected_by_percent': 'Selected By (%)',
+            'points_per_game': 'PPG', 'goals_scored': 'Goals', 'clean_sheets': 'Clean Sheets', 'goals_conceded': 'GC',
+            'minutes': 'Minutes Played', 'starts': 'Starts'
+        }
+        df.rename(columns=rename_dict, inplace=True)
         
-        opta_df = opta_df.groupby(player_col, as_index=False).sum(numeric_only=True)
-        
-        for x_col in x_stat_cols:
-            opta_df[x_col] = pd.to_numeric(opta_df[x_col], errors='coerce').fillna(0.0)
-            per90_name = f"{x_col}90"
-            opta_df[per90_name] = np.where(opta_df[mins_col] > 0, (opta_df[x_col] / opta_df[mins_col]) * 90, 0).round(2)
-        
-        df['Full Name'] = df['First Name'].astype(str) + ' ' + df['Last Name'].astype(str)
-        web_to_full_map = df.set_index('Web Name')['Full Name'].to_dict()
-        fpl_full_names = df['Full Name'].tolist()
-        fpl_web_names = df['Web Name'].tolist()
-        
-        match_dict = {}
-        for opta_name in opta_df[player_col]:
-            clean_name = str(opta_name).split('\\')[0].strip()
-            full_matches = difflib.get_close_matches(clean_name, fpl_full_names, n=1, cutoff=0.65)
-            if full_matches:
-                match_dict[opta_name] = full_matches[0]
-            else:
-                web_matches = difflib.get_close_matches(clean_name, fpl_web_names, n=1, cutoff=0.6)
-                if web_matches:
-                    match_dict[opta_name] = web_to_full_map[web_matches[0]]
-                    
-        opta_df['matched_full_name'] = opta_df[player_col].map(match_dict)
-        opta_clean = opta_df.dropna(subset=['matched_full_name']).drop_duplicates(subset=['matched_full_name'])
-        
-        merge_cols = ['matched_full_name'] + x_stat_cols + [f"{c}90" for c in x_stat_cols]
-        df = df.merge(opta_clean[merge_cols], left_on='Full Name', right_on='matched_full_name', how='left')
-        
-        for col in x_stat_cols + [f"{c}90" for c in x_stat_cols]:
-            df[col] = df[col].fillna(0.0)
-            
-        df.drop(columns=['matched_full_name', 'Full Name'], inplace=True)
-        
+        if 'Cost (M)' in df.columns:
+            df['Cost (M)'] = df['Cost (M)'] / 10 
+        if 'Minutes Played' in df.columns:
+            df['Minutes Played'] = pd.to_numeric(df['Minutes Played'], errors='coerce').fillna(0)
+
     except Exception as e:
-        st.sidebar.error(f"Failed to fetch remote Opta data. Error: {e}")
+        st.sidebar.error(f"Failed to fetch FPL base data. Error: {e}")
+        return pd.DataFrame()
 
     return df
 
 df = fetch_fpl_data()
 
 # --- Main App Interface ---
-st.title("FPL Advanced Player Explorer (Opta X-Stats Powered)")
+st.title("FPL Advanced Player Explorer")
+
+# Safe handling if data failed to load
+if df.empty:
+    st.warning("Data failed to load. Please check the error messages in the sidebar.")
+    st.stop()
 
 # --- Sidebar Filters ---
 st.sidebar.header("Filter Players")
 search_name = st.sidebar.text_input("Look up by Web Name (separate by commas)")
 
-# Safe unique sorts to prevent "TypeError: '<' not supported between instances of 'float' and 'str'"
 safe_teams = sorted([str(x) for x in df['Team'].dropna().unique()]) if 'Team' in df.columns else []
 selected_teams = st.sidebar.multiselect("Categorize by Team", safe_teams)
 
@@ -361,9 +299,7 @@ core_cols = ['First Name', 'Last Name', 'Web Name', 'Team', 'Position', 'Cost (M
 other_cols = sorted([c for c in filtered_df.columns if c not in core_cols])
 logical_columns = [c for c in core_cols if c in filtered_df.columns] + other_cols
 
-# Create dynamic default table columns depending on what x-stats were successfully pulled
-x_cols_pulled = [c for c in other_cols if c.lower().startswith('x') or 'npxg' in c.lower()]
-default_cols = [c for c in ['Web Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'Minutes Played'] if c in logical_columns] + x_cols_pulled[:3] 
+default_cols = [c for c in ['Web Name', 'Team', 'Position', 'Cost (M)', 'Total Points', 'Minutes Played'] if c in logical_columns]
 selected_columns = st.sidebar.multiselect("Select Table Columns", logical_columns, default=default_cols)
 display_df = filtered_df[selected_columns]
 
@@ -380,10 +316,14 @@ if show_graph:
     
     if all_numeric_cols:
         st.sidebar.subheader("Select Graph Axes")
-        x_axis = st.sidebar.selectbox("X-Axis", all_numeric_cols, index=all_numeric_cols.index(x_cols_pulled[0]) if len(x_cols_pulled) > 0 else 0, key="x_axis_select")
+        
+        default_x = 'Cost (M)' if 'Cost (M)' in all_numeric_cols else all_numeric_cols[0]
+        default_y = 'Total Points' if 'Total Points' in all_numeric_cols else (all_numeric_cols[1] if len(all_numeric_cols) > 1 else all_numeric_cols[0])
+        
+        x_axis = st.sidebar.selectbox("X-Axis", all_numeric_cols, index=all_numeric_cols.index(default_x), key="x_axis_select")
         x_order = st.sidebar.radio("X-Axis Order", ["Ascending", "Descending"], horizontal=True, key="x_axis_order")
         
-        y_axis = st.sidebar.selectbox("Y-Axis", all_numeric_cols, index=all_numeric_cols.index(x_cols_pulled[1]) if len(x_cols_pulled) > 1 else (1 if len(all_numeric_cols) > 1 else 0), key="y_axis_select")
+        y_axis = st.sidebar.selectbox("Y-Axis", all_numeric_cols, index=all_numeric_cols.index(default_y), key="y_axis_select")
         y_order = st.sidebar.radio("Y-Axis Order", ["Ascending", "Descending"], horizontal=True, key="y_axis_order")
 
 # --- Data Table Rendering ---
