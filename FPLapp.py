@@ -92,7 +92,7 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
 
     const teamColors = {{
         'ARS': {{p: '#EF0107', s: '#FFFFFF'}}, 'AVL': {{p: '#670E36', s: '#95BFE5'}},
-        'BOU': {{p: '#DA291C', s: '#000000'}}, 'BRE': {{p: '#E30613', s: '#FFFFFF'}},
+        'BOU': {{p: '#000000', s: '#DA291C'}}, 'BRE': {{p: '#E30613', s: '#FFFFFF'}},
         'BHA': {{p: '#0057B8', s: '#FFFFFF'}}, 'CHE': {{p: '#034694', s: '#FFFFFF'}},
         'COV': {{p: '#00BFFF', s: '#FFFFFF'}}, 'CRY': {{p: '#1B458F', s: '#C4122E'}},
         'EVE': {{p: '#003399', s: '#FFFFFF'}}, 'FUL': {{p: '#FFFFFF', s: '#000000'}},
