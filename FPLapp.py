@@ -340,8 +340,8 @@ def load_historical_data(file_path):
                 }
             elif '25-26' in file_path:
                 team_map = {
-                    1: 'ARS', 2: 'AVL', 3: 'BOU', 5: 'BRE', 4: 'BHA', 
-                    6: 'BUR', 7: 'CHE', 8: 'CRY', 9: 'EVE', 10: 'FUL', 
+                    1: 'ARS', 2: 'AVL', 3: 'BOU', 5: 'BRE', 6: 'BHA', 
+                    4: 'BUR', 7: 'CHE', 8: 'CRY', 9: 'EVE', 10: 'FUL', 
                     11: 'LEE', 12: 'LIV', 13: 'MCI', 14: 'MUN', 15: 'NEW', 
                     16: 'NFO', 17: 'SUN', 18: 'TOT', 19: 'WHU', 20: 'WOL'
                 }
