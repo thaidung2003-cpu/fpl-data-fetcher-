@@ -96,11 +96,13 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
         'BHA': {{p: '#0057B8', s: '#FFFFFF'}}, 'CHE': {{p: '#034694', s: '#FFFFFF'}},
         'COV': {{p: '#00BFFF', s: '#FFFFFF'}}, 'CRY': {{p: '#1B458F', s: '#C4122E'}},
         'EVE': {{p: '#003399', s: '#FFFFFF'}}, 'FUL': {{p: '#FFFFFF', s: '#000000'}},
-        'HUL': {{p: '#F5A12D', s: '#000000'}}, 'IPS': {{p: '#0054A6', s: '#FFFFFF'}},
-        'LEE': {{p: '#FFFFFF', s: '#1D428A'}}, 'LIV': {{p: '#C8102E', s: '#FFFFFF'}},
-        'MCI': {{p: '#6CABDD', s: '#FFFFFF'}}, 'MUN': {{p: '#DA020E', s: '#000000'}},
-        'NEW': {{p: '#000000', s: '#FFFFFF'}}, 'NFO': {{p: '#DD0000', s: '#FFFFFF'}},
-        'SUN': {{p: '#FF0000', s: '#FFFFFF'}}, 'TOT': {{p: '#FFFFFF', s: '#132257'}}
+        'IPS': {{p: '#0054A6', s: '#FFFFFF'}}, 'LEI': {{p: '#003090', s: '#FFFFFF'}},
+        'LIV': {{p: '#C8102E', s: '#FFFFFF'}}, 'MCI': {{p: '#6CABDD', s: '#FFFFFF'}}, 
+        'MUN': {{p: '#DA020E', s: '#000000'}}, 'NEW': {{p: '#000000', s: '#FFFFFF'}}, 
+        'NFO': {{p: '#DD0000', s: '#FFFFFF'}}, 'SOU': {{p: '#D71920', s: '#132257'}},
+        'TOT': {{p: '#FFFFFF', s: '#132257'}}, 'WHU': {{p: '#7A263A', s: '#1BB1E7'}}, 
+        'WOL': {{p: '#FDB913', s: '#231F20'}}, 'BUR': {{p: '#6C1D45', s: '#99D6EA'}}, 
+        'LEE': {{p: '#FFFFFF', s: '#1D428A'}}, 'SUN': {{p: '#FF0000', s: '#FFFFFF'}}
     }};
 
     const defs = svg.append("defs");
@@ -224,7 +226,6 @@ def get_live_fpl_data():
             if df[col].dtype == 'object' and col not in ['first_name', 'second_name', 'web_name', 'short_name', 'singular_name_short', 'photo', 'status', 'news']:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        # Drop non-performance/misc/metadata columns
         useless_cols = [
             'id', 'team', 'element_type', 'team_code', 'chance_of_playing_next_round', 'chance_of_playing_this_round', 
             'photo', 'status', 'news', 'news_added', 'squad_number', 'ep_this', 'ep_next', 'in_dreamteam',
@@ -270,7 +271,6 @@ def get_live_fpl_data():
         st.sidebar.error(f"Failed to fetch live FPL data. Error: {e}")
         return pd.DataFrame(), "Unknown"
 
-    # Merge NPxG JSON only for live season
     try:
         file_path = os.path.join(os.path.dirname(__file__), "league-players.json")
         if os.path.exists(file_path):
@@ -318,7 +318,7 @@ def load_historical_data(file_path):
             df['Position'] = df['element_type'].map(pos_map)
             
         useless_cols = [
-            'id', 'team_code', 'chance_of_playing_next_round', 'chance_of_playing_this_round', 
+            'id', 'chance_of_playing_next_round', 'chance_of_playing_this_round', 
             'photo', 'status', 'news', 'news_added', 'squad_number', 'ep_this', 'ep_next', 'in_dreamteam',
             'selected_by_percent', 'form', 'points_per_game', 'transfers_in', 'transfers_out', 'transfers_in_event',
             'transfers_out_event', 'value_form', 'value_season', 'cost_change_start', 'cost_change_event',
@@ -326,8 +326,30 @@ def load_historical_data(file_path):
         ]
         df.drop(columns=[c for c in useless_cols if c in df.columns], inplace=True, errors='ignore')
         
+        # Map FPL specific team IDs (1-20) to exact short names based on season alphabetical order
+        if 'team' in df.columns:
+            if '24-25' in file_path:
+                team_map = {
+                    1: 'ARS', 2: 'AVL', 3: 'BOU', 4: 'BRE', 5: 'BHA', 
+                    6: 'CHE', 7: 'CRY', 8: 'EVE', 9: 'FUL', 10: 'IPS', 
+                    11: 'LEI', 12: 'LIV', 13: 'MCI', 14: 'MUN', 15: 'NEW', 
+                    16: 'NFO', 17: 'SOU', 18: 'TOT', 19: 'WHU', 20: 'WOL'
+                }
+            elif '25-26' in file_path:
+                team_map = {
+                    1: 'ARS', 2: 'AVL', 3: 'BOU', 4: 'BRE', 5: 'BHA', 
+                    6: 'BUR', 7: 'CHE', 8: 'CRY', 9: 'EVE', 10: 'FUL', 
+                    11: 'LEE', 12: 'LIV', 13: 'MCI', 14: 'MUN', 15: 'NEW', 
+                    16: 'NFO', 17: 'SUN', 18: 'TOT', 19: 'WHU', 20: 'WOL'
+                }
+            else:
+                team_map = {}
+                
+            df['Team'] = df['team'].map(team_map).fillna(df['team'].astype(str))
+            df.drop(columns=['team', 'team_code'], errors='ignore', inplace=True)
+            
         rename_dict = {
-            'first_name': 'First Name', 'second_name': 'Last Name', 'web_name': 'Web Name', 'team': 'Team', 
+            'first_name': 'First Name', 'second_name': 'Last Name', 'web_name': 'Web Name', 
             'now_cost': 'Cost (M)', 'total_points': 'Total Points', 'goals_scored': 'Goals', 'assists': 'Assists', 
             'clean_sheets': 'Clean Sheets', 'goals_conceded': 'GC',
             'minutes': 'Minutes Played', 'starts': 'Starts', 'expected_goals': 'xG', 'expected_assists': 'xA', 
@@ -339,8 +361,6 @@ def load_historical_data(file_path):
         }
         df.rename(columns=rename_dict, inplace=True)
         
-        if 'Team' in df.columns:
-            df['Team'] = df['Team'].astype(str)
         if 'Cost (M)' in df.columns:
             df['Cost (M)'] = pd.to_numeric(df['Cost (M)'], errors='coerce') / 10 
         if 'Minutes Played' in df.columns:
@@ -451,7 +471,6 @@ st.sidebar.header("Display Options")
 st.sidebar.markdown("Customize Table Columns:")
 
 selected_columns = ['Web Name', 'Team', 'Position'] 
-# Generate defaults cleanly to avoid KeyErrors if custom NPxG stats aren't loaded in historical data
 default_table_cols = [c for c in ['Cost (M)', 'Total Points', 'Minutes Played', 'xG', 'xA', 'NPxG'] if c in filtered_df.columns]
 
 with st.sidebar.expander("⚙️ Select Stats by Category", expanded=False):
