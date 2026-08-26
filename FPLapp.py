@@ -102,7 +102,7 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
         'NFO': {{p: '#DD0000', s: '#FFFFFF'}}, 'SOU': {{p: '#D71920', s: '#132257'}},
         'TOT': {{p: '#FFFFFF', s: '#132257'}}, 'WHU': {{p: '#7A263A', s: '#1BB1E7'}}, 
         'WOL': {{p: '#FDB913', s: '#231F20'}}, 'BUR': {{p: '#6C1D45', s: '#99D6EA'}}, 
-        'LEE': {{p: '#FFFFFF', s: '#1D428A'}}, 'SUN': {{p: '#FF0000', s: '#FFFFFF'}}
+        'LEE': {{p: '#FFCD00', s: '#1D428A'}}, 'SUN': {{p: '#FF0000', s: '#FFFFFF'}}
     }};
 
     const defs = svg.append("defs");
