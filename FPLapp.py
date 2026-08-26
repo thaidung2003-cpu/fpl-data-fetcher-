@@ -189,8 +189,9 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
     st.components.v1.html(d3_code, height=height, scrolling=True)
 
 # --- Data Fetching and Processing ---
+
 @st.cache_data(ttl=3600)
-def get_fpl_data():
+def get_live_fpl_data():
     try:
         url = "https://fantasy.premierleague.com/api/bootstrap-static/"
         fpl_headers = {
@@ -241,10 +242,8 @@ def get_fpl_data():
             'saves', 'penalties_saved', 'influence', 'creativity', 'threat', 'ict_index',
             'defensive_contribution', 'defensive_contribution_per_90'
         ]
-
         df = df[[c for c in base_cols if c in df.columns]]
         
-        # Rename essential performance columns
         rename_dict = {
             'first_name': 'First Name', 'second_name': 'Last Name', 'web_name': 'Web Name', 'short_name': 'Team', 'singular_name_short': 'Position', 
             'now_cost': 'Cost (M)', 'total_points': 'Total Points', 'goals_scored': 'Goals', 'assists': 'Assists', 'clean_sheets': 'Clean Sheets', 'goals_conceded': 'GC',
@@ -262,16 +261,16 @@ def get_fpl_data():
         if 'Minutes Played' in df.columns:
             df['Minutes Played'] = pd.to_numeric(df['Minutes Played'], errors='coerce').fillna(0)
             
-        # Calculate Per-90 metrics natively if needed
         for col in ['xG', 'xA', 'xGI', 'xGC']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
                 df[f'{col}90'] = np.where(df['Minutes Played'] > 0, (df[col] / df['Minutes Played']) * 90, 0).round(2)
 
     except Exception as e:
-        st.sidebar.error(f"Failed to fetch FPL base data. Error: {e}")
-        return None, "Unknown"
+        st.sidebar.error(f"Failed to fetch live FPL data. Error: {e}")
+        return pd.DataFrame(), "Unknown"
 
+    # Merge NPxG JSON only for live season
     try:
         file_path = os.path.join(os.path.dirname(__file__), "league-players.json")
         if os.path.exists(file_path):
@@ -279,7 +278,6 @@ def get_fpl_data():
                 npxg_data = json.load(f)
                 
             npxg_df = pd.DataFrame(npxg_data)
-            
             df['Full Name'] = df['First Name'].astype(str) + ' ' + df['Last Name'].astype(str)
             fpl_full_names = df['Full Name'].tolist()
             fpl_web_names = df['Web Name'].tolist()
@@ -300,7 +298,6 @@ def get_fpl_data():
             npxg_clean = npxg_df.dropna(subset=['matched_full_name']).drop_duplicates(subset=['matched_full_name'])
             
             df = df.merge(npxg_clean[['matched_full_name', 'NPxG', 'NPxG90']], left_on='Full Name', right_on='matched_full_name', how='left')
-            
             df['NPxG'] = df['NPxG'].fillna(0.0)
             df['NPxG90'] = df['NPxG90'].fillna(0.0)
             df.drop(columns=['matched_full_name', 'Full Name'], inplace=True)
@@ -310,28 +307,89 @@ def get_fpl_data():
 
     return df, current_gw
 
-df, active_gameweek = get_fpl_data()
+@st.cache_data
+def load_historical_data(file_path):
+    try:
+        abs_path = os.path.join(os.path.dirname(__file__), file_path)
+        df = pd.read_csv(abs_path)
+        
+        pos_map = {1: 'GKP', 2: 'DEF', 3: 'MID', 4: 'FWD'}
+        if 'element_type' in df.columns:
+            df['Position'] = df['element_type'].map(pos_map)
+            
+        useless_cols = [
+            'id', 'team_code', 'chance_of_playing_next_round', 'chance_of_playing_this_round', 
+            'photo', 'status', 'news', 'news_added', 'squad_number', 'ep_this', 'ep_next', 'in_dreamteam',
+            'selected_by_percent', 'form', 'points_per_game', 'transfers_in', 'transfers_out', 'transfers_in_event',
+            'transfers_out_event', 'value_form', 'value_season', 'cost_change_start', 'cost_change_event',
+            'cost_change_start_fall', 'cost_change_event_fall', 'yellow_cards', 'red_cards', 'penalties_missed', 'own_goals'
+        ]
+        df.drop(columns=[c for c in useless_cols if c in df.columns], inplace=True, errors='ignore')
+        
+        rename_dict = {
+            'first_name': 'First Name', 'second_name': 'Last Name', 'web_name': 'Web Name', 'team': 'Team', 
+            'now_cost': 'Cost (M)', 'total_points': 'Total Points', 'goals_scored': 'Goals', 'assists': 'Assists', 
+            'clean_sheets': 'Clean Sheets', 'goals_conceded': 'GC',
+            'minutes': 'Minutes Played', 'starts': 'Starts', 'expected_goals': 'xG', 'expected_assists': 'xA', 
+            'expected_goal_involvements': 'xGI', 'expected_goals_conceded': 'xGC', 'bonus': 'Bonus', 'bps': 'BPS', 
+            'saves': 'Saves', 'penalties_saved': 'Penalties Saved', 'influence': 'Influence', 'creativity': 'Creativity', 
+            'threat': 'Threat', 'ict_index': 'ICT Index',
+            'defensive_contribution': 'Defensive Contribution',
+            'defensive_contribution_per_90': 'Defensive Contribution 90'
+        }
+        df.rename(columns=rename_dict, inplace=True)
+        
+        if 'Team' in df.columns:
+            df['Team'] = df['Team'].astype(str)
+        if 'Cost (M)' in df.columns:
+            df['Cost (M)'] = pd.to_numeric(df['Cost (M)'], errors='coerce') / 10 
+        if 'Minutes Played' in df.columns:
+            df['Minutes Played'] = pd.to_numeric(df['Minutes Played'], errors='coerce').fillna(0)
+            
+        for col in ['xG', 'xA', 'xGI', 'xGC']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+                df[f'{col}90'] = np.where(df['Minutes Played'] > 0, (df[col] / df['Minutes Played']) * 90, 0).round(2)
+                
+        return df, "End of Season"
+    except Exception as e:
+        st.error(f"Error loading historical file '{file_path}': {e}")
+        return pd.DataFrame(), "Unknown"
 
-# --- Main App Interface ---
+# --- Main App Interface & Season Selection ---
 st.title("FPL Advanced Player Explorer")
 
+st.sidebar.header("📊 Select Season")
+season_choice = st.sidebar.radio("Data Source", ["Current Season (Live)", "2025-26 Season", "2024-25 Season"], label_visibility="collapsed")
+
+if season_choice == "Current Season (Live)":
+    df, active_gameweek = get_live_fpl_data()
+    is_live = True
+elif season_choice == "2025-26 Season":
+    df, active_gameweek = load_historical_data("players_raw25-26.csv")
+    is_live = False
+elif season_choice == "2024-25 Season":
+    df, active_gameweek = load_historical_data("players_raw24-25.csv")
+    is_live = False
+
 if not isinstance(df, pd.DataFrame) or df.empty:
-    st.warning("Data failed to load. Please check the error messages in the sidebar.")
+    st.warning("Data failed to load. Please check the error messages or ensure your historical CSV files are uploaded.")
     st.stop()
 
-# --- Sidebar Filters & Dismissible Reminder ---
-if "dismiss_reminder" not in st.session_state:
-    st.session_state.dismiss_reminder = False
+# --- Gameweek Maintenance Reminder (Live Only) ---
+if is_live:
+    if "dismiss_reminder" not in st.session_state:
+        st.session_state.dismiss_reminder = False
 
-if not st.session_state.dismiss_reminder:
-    with st.sidebar.container(border=True):
-        col1, col2 = st.columns([6, 1])
-        with col1:
-            st.markdown(f"**⚠️ GW {active_gameweek}**\n\nPush updated `league-players.json` to GitHub!")
-        with col2:
-            if st.button("✖", key="dismiss_btn", help="Dismiss"):
-                st.session_state.dismiss_reminder = True
-                st.rerun()
+    if not st.session_state.dismiss_reminder:
+        with st.sidebar.container(border=True):
+            col1, col2 = st.columns([6, 1])
+            with col1:
+                st.markdown(f"**⚠️ GW {active_gameweek}**\n\nPush updated `league-players.json` to GitHub!")
+            with col2:
+                if st.button("✖", key="dismiss_btn", help="Dismiss"):
+                    st.session_state.dismiss_reminder = True
+                    st.rerun()
 
 st.sidebar.divider()
 st.sidebar.header("Filter Players")
@@ -392,8 +450,9 @@ all_numeric_cols = filtered_df.select_dtypes(include=['float64', 'int64']).colum
 st.sidebar.header("Display Options")
 st.sidebar.markdown("Customize Table Columns:")
 
-selected_columns = ['Web Name', 'Team', 'Position'] # Removed First/Last Name, locking only Web Name
-default_table_cols = ['Cost (M)', 'Total Points', 'Minutes Played', 'xG', 'xA', 'NPxG']
+selected_columns = ['Web Name', 'Team', 'Position'] 
+# Generate defaults cleanly to avoid KeyErrors if custom NPxG stats aren't loaded in historical data
+default_table_cols = [c for c in ['Cost (M)', 'Total Points', 'Minutes Played', 'xG', 'xA', 'NPxG'] if c in filtered_df.columns]
 
 with st.sidebar.expander("⚙️ Select Stats by Category", expanded=False):
     for cat_name, cat_cols in stat_categories.items():
@@ -415,30 +474,31 @@ graph_height = st.sidebar.slider("Chart Height (px)", min_value=500, max_value=3
 
 if show_graph and all_numeric_cols:
     st.sidebar.subheader("Select Graph Axes")
-    category_list = list(stat_categories.keys())
+    category_list = [k for k, v in stat_categories.items() if any(col in filtered_df.columns for col in v)]
     
-    # X-Axis Settings
-    st.sidebar.markdown("**X-Axis**")
-    x_cat = st.sidebar.selectbox("Category", category_list, index=0, key="x_cat_select", label_visibility="collapsed")
-    x_axis = st.sidebar.selectbox("Metric", [c for c in stat_categories[x_cat] if c in filtered_df.columns], index=0, key="x_metric_select")
-    x_order = st.sidebar.radio("X-Axis Order", ["Ascending", "Descending"], horizontal=True, key="x_axis_order")
-    
-    # Y-Axis Settings
-    st.sidebar.markdown("**Y-Axis**")
-    y_default_cat_idx = category_list.index("Expected Metrics") if "Expected Metrics" in category_list else 0
-    y_cat = st.sidebar.selectbox("Category", category_list, index=y_default_cat_idx, key="y_cat_select", label_visibility="collapsed")
-    
-    valid_y_metrics = [c for c in stat_categories[y_cat] if c in filtered_df.columns]
-    y_default_metric_idx = valid_y_metrics.index("xG") if "xG" in valid_y_metrics else 0
-    y_axis = st.sidebar.selectbox("Metric", valid_y_metrics, index=y_default_metric_idx, key="y_metric_select")
-    y_order = st.sidebar.radio("Y-Axis Order", ["Ascending", "Descending"], horizontal=True, key="y_axis_order")
+    if category_list:
+        # X-Axis Settings
+        st.sidebar.markdown("**X-Axis**")
+        x_cat = st.sidebar.selectbox("Category", category_list, index=0, key="x_cat_select", label_visibility="collapsed")
+        x_axis = st.sidebar.selectbox("Metric", [c for c in stat_categories[x_cat] if c in filtered_df.columns], index=0, key="x_metric_select")
+        x_order = st.sidebar.radio("X-Axis Order", ["Ascending", "Descending"], horizontal=True, key="x_axis_order")
+        
+        # Y-Axis Settings
+        st.sidebar.markdown("**Y-Axis**")
+        y_default_cat_idx = category_list.index("Expected Metrics") if "Expected Metrics" in category_list else 0
+        y_cat = st.sidebar.selectbox("Category", category_list, index=y_default_cat_idx, key="y_cat_select", label_visibility="collapsed")
+        
+        valid_y_metrics = [c for c in stat_categories[y_cat] if c in filtered_df.columns]
+        y_default_metric_idx = valid_y_metrics.index("xG") if "xG" in valid_y_metrics else 0
+        y_axis = st.sidebar.selectbox("Metric", valid_y_metrics, index=y_default_metric_idx, key="y_metric_select")
+        y_order = st.sidebar.radio("Y-Axis Order", ["Ascending", "Descending"], horizontal=True, key="y_axis_order")
 
 # --- Data Table Rendering ---
-st.write(f"Showing **{len(display_df)}** players after primary filters.")
+st.write(f"Showing **{len(display_df)}** players for **{season_choice}** after primary filters.")
 st.dataframe(display_df.style.format(precision=2), use_container_width=True, hide_index=True)
 
 # --- Graph Rendering ---
-if show_graph and all_numeric_cols:
+if show_graph and all_numeric_cols and category_list:
     st.divider()
     st.header("Graph Data")
     
@@ -465,7 +525,7 @@ if show_graph and all_numeric_cols:
 
     if not graph_data.empty:
         filtered_pos_text = selected_positions[0] if len(selected_positions) == 1 else "Various"
-        chart_title = f"£{min_cost:.1f}m-£{max_cost:.1f}m {filtered_pos_text} Data"
+        chart_title = f"£{min_cost:.1f}m-£{max_cost:.1f}m {filtered_pos_text} Data ({season_choice})"
         
         footnotes_list = [
             f"Filtered by position: {', '.join(selected_positions) if selected_positions else 'ALL'}",
