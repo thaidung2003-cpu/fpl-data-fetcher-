@@ -102,7 +102,7 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
         'NFO': {{p: '#DD0000', s: '#FFFFFF'}}, 'SOU': {{p: '#D71920', s: '#132257'}},
         'TOT': {{p: '#FFFFFF', s: '#132257'}}, 'WHU': {{p: '#7A263A', s: '#1BB1E7'}}, 
         'WOL': {{p: '#FDB913', s: '#231F20'}}, 'BUR': {{p: '#6C1D45', s: '#99D6EA'}}, 
-        'LEE': {{p: '#FFCD00', s: '#1D428A'}}, 'SUN': {{p: '#FF0000', s: '#FFFFFF'}}
+        'LEE': {{p: '#FFFFFF', s: '#1D428A'}}, 'SUN': {{p: '#FF0000', s: '#FFFFFF'}}
     }};
 
     const defs = svg.append("defs");
@@ -257,6 +257,9 @@ def get_live_fpl_data():
         }
         df.rename(columns=rename_dict, inplace=True)
         
+        if 'Goals' in df.columns and 'Assists' in df.columns:
+            df['Goal Involvements'] = df['Goals'].fillna(0) + df['Assists'].fillna(0)
+            
         if 'Cost (M)' in df.columns:
             df['Cost (M)'] = df['Cost (M)'] / 10 
         if 'Minutes Played' in df.columns:
@@ -337,8 +340,8 @@ def load_historical_data(file_path):
                 }
             elif '25-26' in file_path:
                 team_map = {
-                    1: 'ARS', 2: 'AVL', 4: 'BOU', 5: 'BRE', 6: 'BHA', 
-                    3: 'BUR', 7: 'CHE', 8: 'CRY', 9: 'EVE', 10: 'FUL', 
+                    1: 'ARS', 2: 'AVL', 3: 'BOU', 4: 'BRE', 5: 'BHA', 
+                    6: 'BUR', 7: 'CHE', 8: 'CRY', 9: 'EVE', 10: 'FUL', 
                     11: 'LEE', 12: 'LIV', 13: 'MCI', 14: 'MUN', 15: 'NEW', 
                     16: 'NFO', 17: 'SUN', 18: 'TOT', 19: 'WHU', 20: 'WOL'
                 }
@@ -361,6 +364,9 @@ def load_historical_data(file_path):
         }
         df.rename(columns=rename_dict, inplace=True)
         
+        if 'Goals' in df.columns and 'Assists' in df.columns:
+            df['Goal Involvements'] = df['Goals'].fillna(0) + df['Assists'].fillna(0)
+            
         if 'Cost (M)' in df.columns:
             df['Cost (M)'] = pd.to_numeric(df['Cost (M)'], errors='coerce') / 10 
         if 'Minutes Played' in df.columns:
@@ -460,7 +466,7 @@ stat_categories = {
     "Value & Basics": ['Cost (M)', 'Total Points', 'Minutes Played', 'Starts'],
     "Expected Metrics": ['xG', 'xA', 'xGI', 'NPxG', 'xGC'],
     "Per-90 Metrics": ['xG90', 'xA90', 'xGI90', 'NPxG90', 'xGC90', 'Defensive Contribution 90'],
-    "Actual Output": ['Goals', 'Assists', 'Clean Sheets', 'GC', 'Saves', 'Penalties Saved', 'Defensive Contribution'],
+    "Actual Output": ['Goals', 'Assists', 'Goal Involvements', 'Clean Sheets', 'GC', 'Saves', 'Penalties Saved', 'Defensive Contribution'],
     "BPS & ICT Index": ['Bonus', 'BPS', 'Influence', 'Creativity', 'Threat', 'ICT Index']
 }
 
