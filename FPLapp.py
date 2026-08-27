@@ -92,7 +92,7 @@ def FPLGraph(data, x_axis_name, y_axis_name, title_text, footnotes, show_labels=
 
     const teamColors = {{
         'ARS': {{p: '#EF0107', s: '#FFFFFF'}}, 'AVL': {{p: '#670E36', s: '#95BFE5'}},
-        'BOU': {{p: '#000000', s: '#DA291C'}}, 'BRE': {{p: '#E30613', s: '#FFFFFF'}},
+        'BOU': {{p: '#DA291C', s: '#000000'}}, 'BRE': {{p: '#E30613', s: '#FFFFFF'}},
         'BHA': {{p: '#0057B8', s: '#FFFFFF'}}, 'CHE': {{p: '#034694', s: '#FFFFFF'}},
         'COV': {{p: '#00BFFF', s: '#FFFFFF'}}, 'CRY': {{p: '#1B458F', s: '#C4122E'}},
         'EVE': {{p: '#003399', s: '#FFFFFF'}}, 'FUL': {{p: '#FFFFFF', s: '#000000'}},
@@ -333,15 +333,15 @@ def load_historical_data(file_path):
         if 'team' in df.columns:
             if '24-25' in file_path:
                 team_map = {
-                    1: 'ARS', 2: 'AVL', 5: 'BOU', 4: 'BRE', 3: 'BHA', 
+                    1: 'ARS', 2: 'AVL', 3: 'BOU', 4: 'BRE', 5: 'BHA', 
                     6: 'CHE', 7: 'CRY', 8: 'EVE', 9: 'FUL', 10: 'IPS', 
                     11: 'LEI', 12: 'LIV', 13: 'MCI', 14: 'MUN', 15: 'NEW', 
                     16: 'NFO', 17: 'SOU', 18: 'TOT', 19: 'WHU', 20: 'WOL'
                 }
             elif '25-26' in file_path:
                 team_map = {
-                    1: 'ARS', 2: 'AVL', 4: 'BOU', 5: 'BRE', 6: 'BHA', 
-                    3: 'BUR', 7: 'CHE', 8: 'CRY', 9: 'EVE', 10: 'FUL', 
+                    1: 'ARS', 2: 'AVL', 3: 'BOU', 4: 'BUR', 5: 'BRE', 
+                    6: 'BHA', 7: 'CHE', 8: 'CRY', 9: 'EVE', 10: 'FUL', 
                     11: 'LEE', 12: 'LIV', 13: 'MCI', 14: 'MUN', 15: 'NEW', 
                     16: 'NFO', 17: 'SUN', 18: 'TOT', 19: 'WHU', 20: 'WOL'
                 }
@@ -385,6 +385,9 @@ def load_historical_data(file_path):
 # --- Main App Interface & Season Selection ---
 st.title("FPL Advanced Player Explorer")
 
+# --- Reserve a placeholder at the very top of the sidebar for the push notification ---
+reminder_placeholder = st.sidebar.empty()
+
 st.sidebar.header("📊 Select Season")
 season_choice = st.sidebar.radio("Data Source", ["Current Season (Live)", "2025-26 Season", "2024-25 Season"], label_visibility="collapsed")
 
@@ -402,13 +405,13 @@ if not isinstance(df, pd.DataFrame) or df.empty:
     st.warning("Data failed to load. Please check the error messages or ensure your historical CSV files are uploaded.")
     st.stop()
 
-# --- Gameweek Maintenance Reminder (Live Only) ---
+# --- Gameweek Maintenance Reminder (Live Only) rendered into the top placeholder ---
 if is_live:
     if "dismiss_reminder" not in st.session_state:
         st.session_state.dismiss_reminder = False
 
     if not st.session_state.dismiss_reminder:
-        with st.sidebar.container(border=True):
+        with reminder_placeholder.container(border=True):
             col1, col2 = st.columns([6, 1])
             with col1:
                 st.markdown(f"**⚠️ GW {active_gameweek}**\n\nPush updated `league-players.json` to GitHub!")
