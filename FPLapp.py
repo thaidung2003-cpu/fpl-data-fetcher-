@@ -412,13 +412,16 @@ if is_live:
 
     if not st.session_state.dismiss_reminder:
         with reminder_placeholder.container(border=True):
-            col1, col2 = st.columns([6, 1])
+            # Place the title and the button in the same row so the button perfectly aligns top-right
+            col1, col2 = st.columns([5, 1])
             with col1:
-                st.markdown(f"**⚠️ GW {active_gameweek}**\n\nPush updated `league-players.json` to GitHub!")
+                st.markdown(f"**⚠️ GW {active_gameweek}**")
             with col2:
                 if st.button("✖", key="dismiss_btn", help="Dismiss"):
                     st.session_state.dismiss_reminder = True
                     st.rerun()
+            # Place the descriptive text neatly below them
+            st.markdown("Push updated `league-players.json` to GitHub!")
 
 st.sidebar.divider()
 st.sidebar.header("Filter Players")
